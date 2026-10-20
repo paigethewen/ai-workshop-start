@@ -35,4 +35,4 @@ anthropics/cwc-workshops · 8 skills
 - A rate limit, a rejected token or GitHub out of reach stops the whole scan: the message, exit code 1
 - An unknown owner → `Organization or user not found: https://github.com/<owner>`, exit code 1
 - No repositories → `<owner> · 0 of 0 repositories with skills`, exit code 0
-- Only `scan`: the web view scans one repository
+- The web view scans an organization the same way, see [web.md](web.md)

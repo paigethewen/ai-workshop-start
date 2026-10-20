@@ -1,5 +1,5 @@
-// The decisions in spec/web.md, checked on what the web view's server answers for ./fixture and for
-// JetBrains/example, as tests/helpers.ts answers it.
+// The decisions in spec/web.md, checked on what the web view's server answers for ./fixture, for
+// JetBrains/example and for the Acme organization, as tests/helpers.ts answers them.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -7,13 +7,20 @@ import { createServer, type Server } from 'node:http';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createBrowserBackend } from '../src/browser.ts';
+import { openGitHubOrganization, parseGitHubOwner, type Fetch } from '../src/core/github.ts';
+import type { Organization } from '../src/core/organization.ts';
+import { replay } from '../src/core/replay.ts';
 import type { Source } from '../src/core/scan.ts';
-import { createWebServer, listen, type WebScan } from '../src/web/server.ts';
-import { atlas, CLI, EXAMPLE_COMMIT, FIXTURE, open } from './helpers.ts';
+import { createWebServer, listen, type WebOrganization, type WebScan } from '../src/web/server.ts';
+import { ACME, API, atlas, CLI, EXAMPLE_COMMIT, FIXTURE, open, openOrganization } from './helpers.ts';
 
 /** A web view on a free port, closed after the test. */
-async function webView(t: { after(fn: () => void): void }, openSource = open) {
-  const server = createWebServer({ open: openSource });
+async function webView(
+  t: { after(fn: () => void): void },
+  openSource = open,
+  openOwner: (input: string) => Promise<Organization> | undefined = openOrganization,
+) {
+  const server = createWebServer({ open: openSource, openOrganization: openOwner });
   const url = await listen(server, 0);
   t.after(() => server.close());
   return { url, get: (path: string, headers?: Record<string, string>) => fetch(new URL(path, url), { headers }) };
@@ -23,6 +30,16 @@ async function scanned(t: { after(fn: () => void): void }, repo: string, openSou
   const response = await (await webView(t, openSource)).get(`/api/scan?repo=${encodeURIComponent(repo)}`);
   assert.equal(response.status, 200);
   return response.json() as Promise<WebScan>;
+}
+
+/** What the CLI opens for an owner URL, with GitHub answering from `fetch`. */
+function owner(fetch: Fetch) {
+  return (input: string) => (parseGitHubOwner(input) ? openGitHubOrganization(input, { fetch, token: 'test' }) : undefined);
+}
+
+async function scannedOrganization(t: { after(fn: () => void): void }, url: string, fetch: Fetch) {
+  const view = await webView(t, open, owner(fetch));
+  return view.get(`/api/scan?repo=${encodeURIComponent(url)}`);
 }
 
 /** One SKILL.md, in a repository of its own. */
@@ -87,13 +104,74 @@ test('a repository that cannot be scanned → 400 and the message the CLI prints
   assert.deepEqual(await empty.json(), { error: 'Enter a GitHub URL or a directory' });
 });
 
+test('an owner URL lists the same repositories, counts, order and warnings as the CLI prints', async (t) => {
+  const response = await scannedOrganization(t, 'https://github.com/acme', replay(ACME));
+  assert.equal(response.status, 200);
+  const web = (await response.json()) as WebOrganization;
+  const cli = await atlas(['scan', 'https://github.com/acme'], { openOrganization: owner(replay(ACME)) });
+  assert.equal(cli.code, 0, cli.stderr);
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  assert.deepEqual(
+    [
+      `${web.organization.id} · ${web.repositories.length} of ${plural(web.total, 'repository', 'repositories')} with skills`,
+      ...web.repositories.map((repository) => `${repository.id} · ${plural(repository.skills.length, 'skill', 'skills')}`),
+    ],
+    cli.stdout.split('\n'),
+  );
+  assert.deepEqual(web.warnings.map((warning) => `warning: ${warning}`), cli.stderr.split('\n'));
+  assert.deepEqual(web.organization, { id: 'Acme', url: 'https://github.com/Acme' });
+  assert.equal(web.total, 4, 'the fork is neither scanned nor counted');
+});
+
+test("each repository of an organization comes with its skills' names and a URL that scans it alone", async (t) => {
+  const web = (await (await scannedOrganization(t, 'https://github.com/acme', replay(ACME))).json()) as WebOrganization;
+  assert.deepEqual(web.repositories, [
+    { id: 'Acme/app', url: 'https://github.com/Acme/app', commit: 'a'.repeat(40), skills: ['commits', 'release'] },
+    { id: 'Acme/tools', url: 'https://github.com/Acme/tools', commit: 'b'.repeat(40), skills: ['lint'] },
+  ]);
+  const app = await scanned(t, 'https://github.com/JetBrains/example');
+  assert.equal(app.repository.id, 'JetBrains/example', 'a repository URL is still one repository');
+});
+
+test('an organization without repositories with skills → 0 of N, and an empty list', async (t) => {
+  const empty = replay({
+    [`${API}/users/Nobody-home`]: { status: 200, body: { login: 'Nobody-home' } },
+    [`${API}/users/Nobody-home/repos?per_page=100&page=1`]: { status: 200, body: [] },
+  });
+  const response = await scannedOrganization(t, 'https://github.com/Nobody-home', empty);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    organization: { id: 'Nobody-home', url: 'https://github.com/Nobody-home' },
+    total: 0,
+    repositories: [],
+    warnings: [],
+  });
+});
+
+test('an organization that cannot be scanned → 400 and the message the CLI prints', async (t) => {
+  const unknown = replay({ [`${API}/users/no-such-owner`]: { status: 404, body: { message: 'Not Found' } } });
+  const missing = await scannedOrganization(t, 'https://github.com/no-such-owner', unknown);
+  assert.equal(missing.status, 400);
+  assert.deepEqual(await missing.json(), { error: 'Organization or user not found: https://github.com/no-such-owner' });
+
+  const limited = replay({
+    ...ACME,
+    [`${API}/repos/Acme/tools/commits/main`]: { status: 403, body: { message: 'API rate limit exceeded for 192.0.2.1.' } },
+  });
+  const stopped = await scannedOrganization(t, 'https://github.com/acme', limited);
+  assert.equal(stopped.status, 400);
+  assert.deepEqual(await stopped.json(), { error: 'GitHub rate limit reached; try again in a minute' });
+});
+
 test('the page is served with a policy that runs only its own scripts', async (t) => {
   const view = await webView(t);
   const page = await view.get('/');
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type') ?? '', /^text\/html/);
   assert.match(page.headers.get('content-security-policy') ?? '', /script-src 'self'/);
-  assert.match(await page.text(), /<script type="module" src="\/app\.js"><\/script>/);
+  const html = await page.text();
+  assert.match(html, /<script type="module" src="\/app\.js"><\/script>/);
+  assert.match(html, /<main id="organization"/);
   assert.equal((await view.get('/app.js')).status, 200);
   assert.equal((await view.get('/style.css')).status, 200);
   assert.equal((await view.get('/no-such-file')).status, 404);

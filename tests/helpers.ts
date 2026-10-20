@@ -1,4 +1,5 @@
-// Runs the commands the way the CLI does, with GitHub answering from EXAMPLE below.
+// Runs the commands the way the CLI does, with GitHub answering from EXAMPLE below; and ACME, a small
+// organization, as GitHub answers it.
 import { fileURLToPath } from 'node:url';
 import { run, type Context } from '../src/commands.ts';
 import { openGitHub, openGitHubOrganization, parseGitHubOwner, parseGitHubUrl } from '../src/core/github.ts';
@@ -47,3 +48,52 @@ export async function atlas(args: string[], context: Partial<Context> = {}) {
   });
   return { code, stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }
+
+export const API = 'https://api.github.com';
+export const RAW = 'https://raw.githubusercontent.com';
+
+/** A repository in an owner's list. */
+export function listed(id: string, fork = false) {
+  return { full_name: id, default_branch: 'main', fork };
+}
+
+/** What GitHub answers for a repository at `commit` whose tree holds `files`, path → SKILL.md text. */
+export function repository(id: string, commit: string, files: Record<string, string>): Recording {
+  const recording: Recording = {
+    [`${API}/repos/${id}/commits/main`]: { status: 200, body: { sha: commit } },
+    [`${API}/repos/${id}/git/trees/${commit}?recursive=1`]: {
+      status: 200,
+      body: {
+        truncated: false,
+        tree: [
+          { path: 'README.md', mode: '100644', type: 'blob', sha: 'readme' },
+          ...Object.keys(files).map((path) => ({ path, mode: '100644', type: 'blob', sha: path })),
+        ],
+      },
+    },
+  };
+  for (const [path, text] of Object.entries(files)) recording[`${RAW}/${id}/${commit}/${path}`] = { status: 200, body: text };
+  return recording;
+}
+
+export const skill = (name: string) => `---\nname: ${name}\ndescription: The ${name} skill.\n---\n`;
+
+/**
+ * Acme: app with two skills, one kept for two agents; tools with one; docs with none; an empty
+ * repository, which GitHub cannot list; and a fork with skills of its own upstream.
+ */
+export const ACME: Recording = {
+  [`${API}/users/acme`]: { status: 200, body: { login: 'Acme' } },
+  [`${API}/users/Acme/repos?per_page=100&page=1`]: {
+    status: 200,
+    body: [listed('Acme/tools'), listed('Acme/docs'), listed('Acme/upstream', true), listed('Acme/app'), listed('Acme/empty')],
+  },
+  ...repository('Acme/app', 'a'.repeat(40), {
+    '.claude/skills/commits/SKILL.md': skill('commits'),
+    '.agents/skills/commits/SKILL.md': skill('commits'),
+    '.claude/skills/release/SKILL.md': skill('release'),
+  }),
+  ...repository('Acme/tools', 'b'.repeat(40), { '.cursor/skills/lint/SKILL.md': skill('lint') }),
+  ...repository('Acme/docs', 'c'.repeat(40), { 'skills/shipped/SKILL.md': skill('shipped') }),
+  [`${API}/repos/Acme/empty/commits/main`]: { status: 409, body: { message: 'Git Repository is empty.' } },
+};

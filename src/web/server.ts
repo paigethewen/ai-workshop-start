@@ -1,16 +1,20 @@
-// The web view: the same scan, as JSON, and a page that lists the skills and shows each SKILL.md.
+// The web view: the same scan, of a repository or an organization, as JSON, and a page that lists
+// the skills and shows each SKILL.md.
 // Local only: it listens on 127.0.0.1 and answers only requests addressed to it. Nothing is stored.
 import { readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { Marked } from 'marked';
 import { AtlasError } from '../core/errors.ts';
 import { skillLink } from '../core/model.ts';
+import { scanOrganization, type Organization } from '../core/organization.ts';
 import { parseSkill } from '../core/parse.ts';
 import { scan, type Source } from '../core/scan.ts';
 
 export type WebOptions = {
   /** Opens what the user asked to scan, as the CLI does. */
   open(input: string): Promise<Source>;
+  /** Opens an organization, when the input names one without a repository; undefined otherwise. */
+  openOrganization?(input: string): Promise<Organization> | undefined;
 };
 
 /** The page's files, served as they are: no build step. */
@@ -55,7 +59,8 @@ export function createWebServer(options: WebOptions): Server {
       const input = url.searchParams.get('repo')?.trim();
       if (!input) return json(400, { error: 'Enter a GitHub URL or a directory' });
       try {
-        return json(200, await scanForWeb(input, options));
+        const organization = options.openOrganization?.(input);
+        return json(200, organization ? await scanOrganizationForWeb(await organization) : await scanForWeb(input, options));
       } catch (error) {
         if (error instanceof AtlasError) return json(400, { error: error.message });
         return json(500, { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` });
@@ -102,6 +107,33 @@ export type WebScan = {
   skills: WebSkill[];
   warnings: string[];
 };
+
+/** What the page shows for an organization: what the CLI prints, and each repository's skill names. */
+export type WebOrganization = {
+  organization: { id: string; url: string };
+  /** How many repositories were scanned, forks aside. */
+  total: number;
+  /** The repositories with skills, most skills first, then by id. */
+  repositories: { id: string; url: string; commit: string; skills: string[] }[];
+  /** Each one names its repository. */
+  warnings: string[];
+};
+
+/** Every repository of the organization, as `scan` counts them; a repository opens with its own scan. */
+export async function scanOrganizationForWeb(organization: Organization): Promise<WebOrganization> {
+  const result = await scanOrganization(organization);
+  return {
+    organization: { id: result.id, url: `https://github.com/${result.id}` },
+    total: result.total,
+    repositories: result.repositories.map(({ repository: { id, url, commit }, skills }) => ({
+      id,
+      url,
+      commit,
+      skills: skills.map((skill) => skill.name),
+    })),
+    warnings: result.warnings,
+  };
+}
 
 /** One scan; the SKILL.md files it read anyway are kept for the answer, so opening one costs nothing. */
 export async function scanForWeb(input: string, { open }: WebOptions): Promise<WebScan> {

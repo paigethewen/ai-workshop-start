@@ -1,7 +1,10 @@
-// The web view's page: scans through /api/scan and shows one skill at a time. The address keeps the
-// repository in ?repo= and the open skill in #<path>, so a reload or a shared link shows the same.
+// The web view's page: scans through /api/scan and shows one skill at a time, or an organization's
+// repositories with skills. The address keeps the repository or the owner in ?repo= and the open
+// skill in #<path>, so a reload or a shared link shows the same.
 const $ = (id) => document.getElementById(id);
 let current;
+/** The last organization's answer, so that going back to it from one of its repositories is instant. */
+let organization;
 
 /** The agent behind each agent folder, for the badges. */
 const AGENTS = {
@@ -22,7 +25,7 @@ for (const chip of document.querySelectorAll('[data-repo]')) {
 $('filter').addEventListener('input', filter);
 $('copy').addEventListener('click', copySource);
 window.addEventListener('popstate', fromAddress);
-window.addEventListener('hashchange', () => current && show(location.hash.slice(1)));
+window.addEventListener('hashchange', () => current?.skills && show(location.hash.slice(1)));
 document.querySelectorAll('[role=tab]').forEach((tab) => tab.addEventListener('click', () => view(tab.dataset.view)));
 fromAddress();
 
@@ -39,13 +42,16 @@ function fromAddress() {
     screen('welcome');
   } else if (repo !== current?.input) {
     $('repo').value = repo;
-    load(repo);
-  } else show(location.hash.slice(1));
+    if (repo === organization?.input) {
+      current = organization;
+      renderOrganization();
+    } else load(repo);
+  } else if (current.skills) show(location.hash.slice(1));
 }
 
 /** Shows one of the welcome, the problem and the results. */
 function screen(name) {
-  for (const id of ['welcome', 'problem', 'results']) $(id).hidden = id !== name;
+  for (const id of ['welcome', 'problem', 'organization', 'results']) $(id).hidden = id !== name;
 }
 
 async function load(repo) {
@@ -66,7 +72,39 @@ async function load(repo) {
     $('scan-button').disabled = false;
   }
   current = { input: repo, ...body };
-  render();
+  if (current.organization) {
+    organization = current;
+    renderOrganization();
+  } else render();
+}
+
+/** `<owner> · N of M repositories with skills`, then each of them; one opens with its own scan. */
+function renderOrganization() {
+  const { repositories, total, warnings } = current;
+  $('organization-id').textContent = current.organization.id;
+  $('organization-summary').textContent = `${repositories.length} of ${total} ${total === 1 ? 'repository' : 'repositories'} with skills`;
+  $('repositories').replaceChildren(
+    ...repositories.map((repository) => {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = `?repo=${encodeURIComponent(repository.url)}`;
+      link.addEventListener('click', (event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+        event.preventDefault();
+        $('repo').value = repository.url;
+        scanRepo(repository.url);
+      });
+      const title = element('span', 'item-title', repository.id);
+      title.append(element('span', 'count', `${repository.skills.length} ${repository.skills.length === 1 ? 'skill' : 'skills'}`));
+      link.append(title, element('span', 'item-description', repository.skills.join(', ')));
+      item.append(link);
+      return item;
+    }),
+  );
+  $('no-repositories').hidden = repositories.length > 0;
+  folded($('organization-warnings'), warnings);
+  screen('organization');
+  window.scrollTo(0, 0);
 }
 
 function render() {
@@ -89,12 +127,17 @@ function render() {
     }),
   );
   $('no-match').hidden = true;
-  $('warnings').hidden = warnings.length === 0;
-  $('warnings').querySelector('summary').textContent = `${warnings.length} ${warnings.length === 1 ? 'warning' : 'warnings'}`;
-  $('warnings').querySelector('ul').replaceChildren(...warnings.map((warning) => element('li', '', warning)));
+  folded($('warnings'), warnings);
   $('no-skills').hidden = skills.length > 0;
   screen('results');
   show(location.hash.slice(1));
+}
+
+/** The warnings, folded under their count; hidden when there are none. */
+function folded(details, warnings) {
+  details.hidden = warnings.length === 0;
+  details.querySelector('summary').textContent = `${warnings.length} ${warnings.length === 1 ? 'warning' : 'warnings'}`;
+  details.querySelector('ul').replaceChildren(...warnings.map((warning) => element('li', '', warning)));
 }
 
 /** Opens the skill at the path, or the first one. */

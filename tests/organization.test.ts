@@ -1,59 +1,10 @@
 // The organization scan in spec/cli.md, on what the real command prints for small GitHub
-// organizations answered below: `scan https://github.com/<owner>` without a repository.
+// organizations answered below and in tests/helpers.ts: `scan https://github.com/<owner>` without a repository.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { openGitHubOrganization, type Fetch } from '../src/core/github.ts';
-import { replay, type Recording } from '../src/core/replay.ts';
-import { atlas } from './helpers.ts';
-
-const API = 'https://api.github.com';
-const RAW = 'https://raw.githubusercontent.com';
-
-/** A repository in an owner's list. */
-function listed(id: string, fork = false) {
-  return { full_name: id, default_branch: 'main', fork };
-}
-
-/** What GitHub answers for a repository at `commit` whose tree holds `files`, path → SKILL.md text. */
-function repository(id: string, commit: string, files: Record<string, string>): Recording {
-  const recording: Recording = {
-    [`${API}/repos/${id}/commits/main`]: { status: 200, body: { sha: commit } },
-    [`${API}/repos/${id}/git/trees/${commit}?recursive=1`]: {
-      status: 200,
-      body: {
-        truncated: false,
-        tree: [
-          { path: 'README.md', mode: '100644', type: 'blob', sha: 'readme' },
-          ...Object.keys(files).map((path) => ({ path, mode: '100644', type: 'blob', sha: path })),
-        ],
-      },
-    },
-  };
-  for (const [path, text] of Object.entries(files)) recording[`${RAW}/${id}/${commit}/${path}`] = { status: 200, body: text };
-  return recording;
-}
-
-const skill = (name: string) => `---\nname: ${name}\ndescription: The ${name} skill.\n---\n`;
-
-/**
- * Acme: app with two skills, one kept for two agents; tools with one; docs with none; an empty
- * repository, which GitHub cannot list; and a fork with skills of its own upstream.
- */
-const ACME: Recording = {
-  [`${API}/users/acme`]: { status: 200, body: { login: 'Acme' } },
-  [`${API}/users/Acme/repos?per_page=100&page=1`]: {
-    status: 200,
-    body: [listed('Acme/tools'), listed('Acme/docs'), listed('Acme/upstream', true), listed('Acme/app'), listed('Acme/empty')],
-  },
-  ...repository('Acme/app', 'a'.repeat(40), {
-    '.claude/skills/commits/SKILL.md': skill('commits'),
-    '.agents/skills/commits/SKILL.md': skill('commits'),
-    '.claude/skills/release/SKILL.md': skill('release'),
-  }),
-  ...repository('Acme/tools', 'b'.repeat(40), { '.cursor/skills/lint/SKILL.md': skill('lint') }),
-  ...repository('Acme/docs', 'c'.repeat(40), { 'skills/shipped/SKILL.md': skill('shipped') }),
-  [`${API}/repos/Acme/empty/commits/main`]: { status: 409, body: { message: 'Git Repository is empty.' } },
-};
+import { replay } from '../src/core/replay.ts';
+import { ACME, API, atlas, listed, repository, skill } from './helpers.ts';
 
 /** `skill-atlas scan <url>`, with GitHub answering from `recording` and a token, as code search would want. */
 function scanOrganization(url: string, fetch: Fetch) {
