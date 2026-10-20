@@ -18,10 +18,10 @@ Videos live only there, never on a branch or in a release: never commit a video,
 
 - `read-skill`: scan `./fixture`, open a skill with copies in three agents, switch from its rendered body to its `SKILL.md`; offline
 - `filter-skills`: scan `JetBrains/kotlin`, filter by `test`: the word is marked in the list and in the open skill
-- `scan-organization`: scan `anthropics`, open one of its repositories, go back to the organization
+- `scan-organization`: scan `modelcontextprotocol`, open one of its repositories, go back to the organization
 
 When no case shows the pull request's feature, add one named after it, built like the others: start from a scan, act through the page's own controls (`#repo`, `#filter`, the list's links, the tabs), wait for what the page shows before each pause, and end on the page that proves the feature.
-Pick a repository whose skills make the feature visible; one under 20 seconds of scanning keeps the video short. Keep the existing cases: they show the features merged so far.
+Pick a repository whose skills make the feature visible; one under 20 seconds of scanning keeps the video short, and a small organization keeps CI under GitHub's secondary rate limit (90 repositories tripped it, 45 do not). Keep the existing cases: they show the features merged so far.
 
 ## 2. Try it locally
 

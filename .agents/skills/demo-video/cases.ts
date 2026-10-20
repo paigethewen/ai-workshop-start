@@ -55,10 +55,11 @@ export const cases: Record<string, Case> = {
     },
   },
   'scan-organization': {
-    about: 'Scan the anthropics organization, open one of its repositories, and go back to the organization',
+    // 45 repositories: anthropics' 90 tripped GitHub's secondary rate limit in CI on the repository opened after.
+    about: 'Scan the modelcontextprotocol organization, open one of its repositories, and go back to the organization',
     github: true,
     async run(page, base) {
-      await scan(page, base, 'https://github.com/anthropics');
+      await scan(page, base, 'https://github.com/modelcontextprotocol');
       await page.locator('#repositories li').first().waitFor({ timeout: 180_000 });
       await pause(page, 3000);
       await page.mouse.wheel(0, 500);
