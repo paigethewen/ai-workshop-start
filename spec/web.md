@@ -2,13 +2,20 @@
 `./skill-atlas serve [--port <port>]`: a local page over the same scan, at `http://127.0.0.1:4173/` by default.
 Enter a GitHub URL or a directory; the page lists every unique skill, and opens each one's `SKILL.md`.
 `GITHUB_TOKEN`, as for `scan`. *Nothing is stored*: each scan is one request, its answer is all there is.
+## The page
+- Before a scan: what Skill Atlas does, and example repositories to scan with one click
+- While scanning, the button spins; a failed scan → its message in place of the results
+- Light and dark, after the system's setting; one column on a narrow screen
 ## The list
 - The **same skills** as `scan`: the same count, order, names, descriptions' *first sentence*, links and warnings
-- `<repo> · N skills`; the warnings, folded, above it
+- `<repo> · N skills`, with the scanned commit; the warnings, folded, above it
+- Each skill: its name, `×N` for N copies in all, the first sentence, and a badge per agent that reads it (`.claude` → Claude, `.github` → Copilot, …) and for a nested package, its `<base>`
+- A filter: the skills whose name, description or path has every word typed
+- No skills → a note on where skills live
 - An unreachable repository → its `scan` message on the page
 ## A skill
 - Its name, description, link and *copies*; the other front matter keys
-- The body after the front matter, **rendered** as Markdown; the `SKILL.md` as it is, one tab over
+- The body after the front matter, **rendered** as Markdown; the `SKILL.md` as it is, one tab over, and a button that copies it
 - A GitHub link opens the file at the *scanned commit*; a local `file://` link is shown as text
 - The address keeps the repository in `?repo=` and the open skill in `#<path>`: a reload shows the same
 ## Safety
