@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { openGitHubOrganization, type Fetch } from '../src/core/github.ts';
 import { replay } from '../src/core/replay.ts';
-import { ACME, API, atlas, listed, repository, skill } from './helpers.ts';
+import { ACME, API, atlas, listed, RAW, repository, skill } from './helpers.ts';
 
 /** `skill-atlas scan <url>`, with GitHub answering from `recording` and a token, as code search would want. */
 function scanOrganization(url: string, fetch: Fetch) {
@@ -100,6 +100,17 @@ test('a rate limit stops the whole organization scan: the message, exit code 1',
   const limited = replay({
     ...ACME,
     [`${API}/repos/Acme/tools/commits/main`]: { status: 403, body: { message: 'API rate limit exceeded for 192.0.2.1.' } },
+  });
+  const scanned = await scanOrganization('https://github.com/acme', limited);
+  assert.equal(scanned.code, 1);
+  assert.equal(scanned.stdout, '');
+  assert.equal(scanned.stderr, 'GitHub rate limit reached; try again in a minute');
+});
+
+test('a rate limit on a raw file stops the whole organization scan: the message, exit code 1', async () => {
+  const limited = replay({
+    ...ACME,
+    [`${RAW}/Acme/app/${'a'.repeat(40)}/.claude/skills/release/SKILL.md`]: { status: 429, body: '429: Too Many Requests' },
   });
   const scanned = await scanOrganization('https://github.com/acme', limited);
   assert.equal(scanned.code, 1);

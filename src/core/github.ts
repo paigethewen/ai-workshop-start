@@ -192,6 +192,10 @@ function client({ fetch, token }: GitHubOptions) {
     async raw(url: string): Promise<Uint8Array | undefined> {
       const response = await get(url);
       if (response.status === 404) return undefined;
+      if (response.status === 429 || (response.status === 403 && /rate limit/i.test(await response.clone().text()))) {
+        // Raw reads go without the token, so a token would not lift this limit.
+        throw new GitHubUnavailable('GitHub rate limit reached; try again in a minute');
+      }
       if (!response.ok) throw new AtlasError(`GitHub answered ${response.status} for ${url}`);
       return new Uint8Array(await response.arrayBuffer());
     },
