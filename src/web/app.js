@@ -1,7 +1,11 @@
 // The web view's page: scans through /api/scan and shows one skill at a time. The address keeps the
 // repository in ?repo= and the open skill in #<path>, so a reload or a shared link shows the same.
+import { excerpt, marked, matches, words as wordsIn } from './filter.js';
+
 const $ = (id) => document.getElementById(id);
 let current;
+/** The filter's words, marked in the list and in the open skill. */
+let words = [];
 
 /** The agent behind each agent folder, for the badges. */
 const AGENTS = {
@@ -74,16 +78,14 @@ function render() {
   $('repository').textContent = repository.commit ? `${repository.id} @ ${repository.commit.slice(0, 7)}` : repository.id;
   $('summary').textContent = `${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`;
   $('filter').value = '';
+  words = [];
   $('skills').replaceChildren(
     ...skills.map((skill) => {
       const item = document.createElement('li');
       const link = document.createElement('a');
       link.href = `#${encodeURIComponent(skill.path)}`;
       link.dataset.path = skill.path;
-      link.dataset.search = `${skill.name} ${skill.description} ${skill.path}`.toLowerCase();
-      const title = element('span', 'item-title', skill.name);
-      if (skill.copies.length) title.append(element('span', 'count', `×${skill.copies.length + 1}`));
-      link.append(title, element('span', 'item-description', firstSentence(skill.description) || 'No description'), badges(skill));
+      fillItem(link, skill);
       item.append(link);
       return item;
     }),
@@ -97,6 +99,19 @@ function render() {
   show(location.hash.slice(1));
 }
 
+/** A skill in the list: its name, its first sentence, the line that matched the filter, its badges. */
+function fillItem(link, skill) {
+  const title = element('span', 'item-title', '');
+  title.append(element('span', '', skill.name));
+  if (skill.copies.length) title.append(element('span', 'count', `×${skill.copies.length + 1}`));
+  const description = firstSentence(skill.description);
+  const line = excerpt(skill.source, words, `${skill.name}\n${description}`);
+  link.replaceChildren(title, element('span', 'item-description', description || 'No description'));
+  if (line) link.append(element('span', 'item-match', line));
+  link.append(badges(skill));
+  mark(link);
+}
+
 /** Opens the skill at the path, or the first one. */
 function show(hash) {
   const path = decodeURIComponent(hash);
@@ -104,6 +119,14 @@ function show(hash) {
   $('skill').hidden = !skill;
   if (!skill) return;
   for (const link of $('skills').querySelectorAll('a')) link.toggleAttribute('aria-current', link.dataset.path === skill.path);
+  fillSkill(skill);
+  $('copy').textContent = 'Copy SKILL.md';
+  $('skill').scrollTop = 0;
+}
+
+/** The open skill, with the filter's words marked. */
+function fillSkill(skill) {
+  current.open = skill;
   $('skill-badges').replaceChildren(badges(skill));
   $('skill-name').textContent = skill.name;
   $('skill-description').textContent = skill.description;
@@ -122,8 +145,20 @@ function show(hash) {
   // Rendered on the server, with the SKILL.md's own HTML escaped.
   $('skill-rendered').innerHTML = skill.html || '<p class="empty">This SKILL.md has no body.</p>';
   $('skill-source').textContent = skill.source;
-  $('copy').textContent = 'Copy SKILL.md';
-  $('skill').scrollTop = 0;
+  for (const id of ['skill-name', 'skill-description', 'skill-path', 'skill-copies', 'skill-properties', 'skill-rendered', 'skill-source']) mark($(id));
+}
+
+/** Marks the filter's words in the node's text, as text nodes and <mark>s: the HTML around them is kept. */
+function mark(root) {
+  if (!words.length) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const texts = [];
+  while (walker.nextNode()) texts.push(walker.currentNode);
+  for (const text of texts) {
+    const pieces = marked(text.data, words);
+    if (!pieces.some((piece) => piece.marked)) continue;
+    text.replaceWith(...pieces.map((piece) => (piece.marked ? element('mark', '', piece.text) : document.createTextNode(piece.text))));
+  }
 }
 
 /** The agents that read the skill, from its folder and its copies' folders, and its package if nested. */
@@ -137,14 +172,18 @@ function badges(skill) {
 }
 
 function filter() {
-  const words = $('filter').value.toLowerCase().split(/\s+/).filter(Boolean);
+  words = wordsIn($('filter').value);
   let shown = 0;
-  for (const link of $('skills').querySelectorAll('a')) {
-    const match = words.every((word) => link.dataset.search.includes(word));
-    link.parentElement.hidden = !match;
-    if (match) shown++;
-  }
+  const links = $('skills').querySelectorAll('a');
+  current.skills.forEach((skill, index) => {
+    const match = matches(skill, words);
+    links[index].parentElement.hidden = !match;
+    if (!match) return;
+    fillItem(links[index], skill);
+    shown++;
+  });
   $('no-match').hidden = shown > 0 || current.skills.length === 0;
+  if (current.open) fillSkill(current.open);
 }
 
 function view(name) {
