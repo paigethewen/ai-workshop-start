@@ -161,12 +161,13 @@ test('./fixture warns only about the malformed skill, the differing copies and t
   assert.ok(warnings().some((line) => /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /.test(line)));
 });
 
-test('this repository has only its own address-comment, code-review and issue-to-pr skills: fixture/ is test data, so the count is 3 and the exit code 0', async () => {
+test('this repository has only its own address-comment, code-review, demo-video and issue-to-pr skills: fixture/ is test data, so the count is 4 and the exit code 0', async () => {
   const scanned = await atlas(['scan', REPOSITORY]);
   assert.equal(scanned.code, 0, scanned.stderr);
-  assert.match(scanned.stdout, /^\S+ · 3 skills$/m);
+  assert.match(scanned.stdout, /^\S+ · 4 skills$/m);
   assert.match(scanned.stdout, /^address-comment — /m);
   assert.match(scanned.stdout, /^code-review — /m);
+  assert.match(scanned.stdout, /^demo-video — /m);
   assert.match(scanned.stdout, /^issue-to-pr — /m);
 });
 
