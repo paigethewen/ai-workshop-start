@@ -30,7 +30,9 @@ jobs:
       - run: node .agents/skills/demo-video/record.ts --out demo-videos all
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Also after a failure: <case>-failed.png shows what the page showed when the case gave up.
       - id: upload
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: demo-videos

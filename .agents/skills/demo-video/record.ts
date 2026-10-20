@@ -33,7 +33,16 @@ try {
   for (const name of names) {
     const context = await browser.newContext({ viewport: size, recordVideo: { dir: out, size } });
     const page = await context.newPage();
-    await cases[name].run(page, base);
+    try {
+      await cases[name].run(page, base);
+    } catch (error) {
+      // What the page showed when the case gave up: a scan's error is on the page, not in the exception.
+      // Best effort: the case's own error is the one to report.
+      await page.screenshot({ path: join(out, `${name}-failed.png`), timeout: 5000 }).catch(() => {});
+      const problem = await page.locator('#problem-message').textContent({ timeout: 1000 }).catch(() => null);
+      if (problem) console.error(`${name}: the page says: ${problem}`);
+      throw error;
+    }
     await page.screenshot({ path: join(out, `${name}.png`) });
     const video = page.video()!;
     await context.close();
