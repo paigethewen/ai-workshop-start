@@ -23,9 +23,11 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
       BRANCH: ${{ github.event.pull_request.head.ref }}
     steps:
+      # With SCREENSHOTS_TOKEN, a token that may push to the repository, the push starts CI on the pull request.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.SCREENSHOTS_TOKEN || github.token }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -48,6 +50,7 @@ jobs:
       - name: Commit them
         env:
           REVIEWER: ${{ github.event.sender.login }}
+          HAS_TOKEN: ${{ secrets.SCREENSHOTS_TOKEN != '' && '1' || '' }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -57,9 +60,13 @@ jobs:
           else
             git commit --quiet -m "Accept the web view's screenshots, reviewed by @$REVIEWER" -m "From the accept-screenshots label on #$PR."
             git push origin "HEAD:$BRANCH"
-            body="@$REVIEWER accepted the screenshots: $(git rev-parse --short HEAD) makes them the baselines. CI runs again on it."
+            pushed=1
+            body="@$REVIEWER accepted the screenshots: $(git rev-parse --short HEAD) makes them the baselines, and CI runs again on it."
           fi
           gh pr edit "$PR" --remove-label accept-screenshots
-          # A push with this workflow's token starts no workflow: CI is started by hand.
-          gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::CI did not start: push to $BRANCH to run it on the new baselines"
+          # Without it, CI on the pull request waits for a maintainer's approval of the push: run it here meanwhile.
+          if [ -n "${pushed:-}" ] && [ -z "$HAS_TOKEN" ]; then
+            gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::CI did not start: push to $BRANCH to run it on the new baselines"
+            body="$body On the pull request, CI waits for a maintainer: Approve workflows to run."
+          fi
           gh pr comment "$PR" --body "$body"

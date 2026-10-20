@@ -39,7 +39,7 @@ gh run download <run-id> --name screenshot-diffs --dir /tmp/diffs-<run-id>
 Look at every `after.png` and `diff.png`. A change the pull request does not mean is a bug: fix it and push.
 A change it means, a new case's screenshots included, is for a person to accept: in the pull request body, say which screenshots change and why, and leave the check failing.
 Never add the `accept-screenshots` label, never commit to `e2e/web/screenshots`, and never loosen the comparison: CI fails any commit of the branch that changes a baseline.
-The reviewer accepts with the label; the [Screenshots workflow](../../../.github/workflows/screenshots.yml) takes them again on Linux, commits them, and runs CI again.
+The reviewer accepts with the label; the [Screenshots workflow](../../../.github/workflows/screenshots.yml) takes them again on Linux, commits them, and runs CI again. Without a `SCREENSHOTS_TOKEN` secret, CI on the pull request then waits for a maintainer's Approve workflows to run.
 
 ## 4. Link it
 
