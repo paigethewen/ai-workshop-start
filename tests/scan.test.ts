@@ -215,6 +215,40 @@ test('a truncated GitHub tree without GITHUB_TOKEN finds root-level agent folder
   assert.match(result.warnings[0], /GITHUB_TOKEN/);
 });
 
+test('a /tree/<ref> URL scans that commit from its tree, even with GITHUB_TOKEN', async () => {
+  const commit = 'fedcba9876543210fedcba9876543210fedcba98';
+  const api = 'https://api.github.com/repos/JetBrains/pinned';
+  // What GitHub answers for a tag; there is no code search answer, so a search would fail the scan.
+  const pinned = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/pinned', default_branch: 'main' } },
+    [`${api}/commits/v1.0`]: { status: 200, body: { sha: commit } },
+    [`${api}/git/trees/${commit}?recursive=1`]: {
+      status: 200,
+      body: { truncated: false, tree: [{ path: '.claude/skills/commits/SKILL.md', mode: '100644', type: 'blob', sha: 'file' }] },
+    },
+    [`https://raw.githubusercontent.com/JetBrains/pinned/${commit}/.claude/skills/commits/SKILL.md`]: {
+      status: 200,
+      body: '---\nname: commits\ndescription: Write commit messages.\n---\n',
+    },
+  });
+  const result = await scan(await openGitHub('https://github.com/JetBrains/pinned/tree/v1.0', { fetch: pinned, token: 'test' }));
+  assert.deepEqual(
+    result.skills.map((skill) => `${skill.commit} ${skill.path}`),
+    [`${commit} .claude/skills/commits/SKILL.md`],
+  );
+});
+
+test('an unknown ref → a clear message, exit code 1', async () => {
+  const api = 'https://api.github.com/repos/JetBrains/pinned';
+  const unknown = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/pinned', default_branch: 'main' } },
+    [`${api}/commits/no-such-ref`]: { status: 404, body: { message: 'Not Found' } },
+  });
+  await assert.rejects(openGitHub('https://github.com/JetBrains/pinned/tree/no-such-ref', { fetch: unknown }), {
+    message: 'Not found in https://github.com/JetBrains/pinned: no-such-ref',
+  });
+});
+
 test('the CLI prints the result at once and stores nothing', (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'skill-atlas-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
@@ -250,4 +284,42 @@ test('rate limit → a message that asks for GITHUB_TOKEN', async () => {
   await assert.rejects(openGitHub('https://github.com/JetBrains/MPS', { fetch: limited }), {
     message: 'GitHub rate limit reached; set GITHUB_TOKEN',
   });
+});
+
+test('a short rate limit is retried after the wait GitHub asks for, then the scan goes on', async () => {
+  const api = 'https://api.github.com/repos/JetBrains/MPS';
+  const answered: string[] = [];
+  let limited = true;
+  // Code-search-style secondary limit: one 429 that asks for no wait, then the answer.
+  const once = replay({
+    [`${api}/commits/master`]: { status: 200, body: { sha: EXAMPLE_COMMIT } },
+    [`${api}/git/trees/${EXAMPLE_COMMIT}?recursive=1`]: { status: 200, body: { truncated: false, tree: [] } },
+  });
+  const fetch = async (url: string) => {
+    answered.push(url);
+    if (url !== api) return once(url);
+    if (limited) {
+      limited = false;
+      return new Response(JSON.stringify({ message: 'You have exceeded a secondary rate limit. Please wait.' }), {
+        status: 429,
+        headers: { 'retry-after': '0' },
+      });
+    }
+    return new Response(JSON.stringify({ full_name: 'JetBrains/MPS', default_branch: 'master' }), { status: 200 });
+  };
+  const source = await openGitHub('https://github.com/JetBrains/MPS/tree/master', { fetch });
+  assert.equal(source.repository.commit, EXAMPLE_COMMIT);
+  assert.deepEqual(answered.slice(0, 2), [api, api]);
+});
+
+test('a rate limit that asks for a longer wait → the rate-limit message, without waiting', async () => {
+  let requests = 0;
+  const fetch = async () => {
+    requests++;
+    return new Response(JSON.stringify({ message: 'try again in 60s' }), { status: 429 });
+  };
+  await assert.rejects(openGitHub('https://github.com/JetBrains/MPS', { fetch, token: 'test' }), {
+    message: 'GitHub rate limit reached; try again in a minute',
+  });
+  assert.equal(requests, 1);
 });

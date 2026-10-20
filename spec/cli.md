@@ -1,7 +1,10 @@
 # Command line
 `./skill-atlas scan <GitHub URL | directory>`
 Prints the result **at once**; *nothing is stored*.
-`GITHUB_TOKEN`, optional: a higher GitHub rate limit.
+`GITHUB_TOKEN`, optional: a higher GitHub rate limit, and code search instead of the tree.
+A GitHub URL may pin a commit, a tag or a branch without a `/`: `https://github.com/<owner>/<repo>/tree/<ref>`.
+- A pinned scan lists the commit's tree, even with `GITHUB_TOKEN`: code search sees only the default branch
+- An unknown ref → `Not found in <repository URL>: <ref>`, exit code 1
 ## Output
 ```
 JetBrains/kotlin · 7 skills

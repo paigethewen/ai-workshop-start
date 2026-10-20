@@ -7,20 +7,23 @@ export type Fetch = (url: string, init?: { headers?: Record<string, string> }) =
 
 export type GitHubOptions = {
   fetch: Fetch;
-  /** With a token, skills are found through code search; without it, through the tree. */
+  /** With a token, skills on the default branch are found through code search; otherwise, through the tree. */
   token?: string;
 };
 
 const API = 'https://api.github.com';
 const RAW = 'https://raw.githubusercontent.com';
 
-/** `https://github.com/owner/repo`, with or without the scheme, a trailing slash or `.git`. */
-export function parseGitHubUrl(input: string): { owner: string; repo: string } | undefined {
-  const match = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i.exec(input.trim());
-  return match ? { owner: match[1], repo: match[2] } : undefined;
+/**
+ * `https://github.com/owner/repo`, with or without the scheme, a trailing slash or `.git`; or
+ * `https://github.com/owner/repo/tree/<ref>`, pinned to a commit, a tag or a branch without a `/`.
+ */
+export function parseGitHubUrl(input: string): { owner: string; repo: string; ref?: string } | undefined {
+  const match = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/tree\/([^/\s]+))?\/?$/i.exec(input.trim());
+  return match ? { owner: match[1], repo: match[2], ref: match[3] } : undefined;
 }
 
-/** Resolves the default branch to a commit and lists the files that may be skills. */
+/** Resolves the pinned ref, else the default branch, to a commit and lists the files that may be skills. */
 export async function openGitHub(input: string, options: GitHubOptions): Promise<Source> {
   const name = parseGitHubUrl(input);
   if (!name) throw new AtlasError(`Not a GitHub repository URL: ${input}`);
@@ -30,9 +33,14 @@ export async function openGitHub(input: string, options: GitHubOptions): Promise
     `Repository not found: https://github.com/${name.owner}/${name.repo}`,
   );
   const id = info.full_name;
-  const { sha } = await github.json<{ sha: string }>(`${API}/repos/${id}/commits/${encodePath(info.default_branch)}`);
+  const ref = name.ref ?? info.default_branch;
+  const { sha } = await github.json<{ sha: string }>(
+    `${API}/repos/${id}/commits/${encodeURIComponent(ref)}`,
+    `Not found in https://github.com/${id}: ${ref}`,
+  );
   const warnings: string[] = [];
-  const paths = options.token ? await searchPaths(github, id) : await treePaths(github, id, sha, warnings);
+  // Code search sees only the default branch: a pinned commit is listed from its tree.
+  const paths = options.token && !name.ref ? await searchPaths(github, id) : await treePaths(github, id, sha, warnings, !!name.ref);
   const [organization, repo] = id.split('/');
   return {
     repository: { id, organization, name: repo, url: `https://github.com/${id}`, commit: sha },
@@ -59,11 +67,12 @@ async function searchPaths(github: Client, id: string): Promise<string[]> {
 type Tree = { truncated: boolean; tree: { path: string; mode: string; type: string; sha: string }[] };
 
 /** The whole tree at once, or only the skill roots when it is too large for one answer. */
-async function treePaths(github: Client, id: string, sha: string, warnings: string[]): Promise<string[]> {
+async function treePaths(github: Client, id: string, sha: string, warnings: string[], pinned: boolean): Promise<string[]> {
   const tree = await github.json<Tree>(`${API}/repos/${id}/git/trees/${sha}?recursive=1`);
   if (!tree.truncated) return files(tree);
+  const hint = pinned ? 'a pinned commit cannot be searched' : 'GITHUB_TOKEN searches everywhere';
   warnings.push(
-    `the tree is too large to list at once; looked only in ${SKILL_ROOTS.join(', ')} at the root, so nested ones were skipped (GITHUB_TOKEN searches everywhere)`,
+    `the tree is too large to list at once; looked only in ${SKILL_ROOTS.join(', ')} at the root, so nested ones were skipped (${hint})`,
   );
   const paths: string[] = [];
   for (const root of SKILL_ROOTS) {
@@ -108,17 +117,27 @@ function client({ fetch, token }: GitHubOptions) {
   }
 
   async function request(url: string, notFound: string): Promise<unknown> {
-    const response = await get(url, { headers });
-    if (response.ok) return response.json();
-    const body: unknown = await response.json().catch(() => undefined);
-    const message = (body as { message?: unknown } | undefined)?.message;
-    const text = typeof message === 'string' ? message : '';
-    if (response.status === 404) throw new AtlasError(notFound);
-    if ((response.status === 403 || response.status === 429) && /rate limit/i.test(text)) {
-      throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
+    for (let attempt = 0; ; attempt++) {
+      const response = await get(url, { headers });
+      if (response.ok) return response.json();
+      const body: unknown = await response.json().catch(() => undefined);
+      const message = (body as { message?: unknown } | undefined)?.message;
+      const text = typeof message === 'string' ? message : '';
+      if (response.status === 404) throw new AtlasError(notFound);
+      if (response.status === 403 || response.status === 429) {
+        // A short secondary limit, as code search gives shared runners, passes in seconds.
+        const wait = retryAfter(response, text);
+        if (wait !== undefined && wait <= MAX_RETRY_WAIT && attempt < MAX_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+          continue;
+        }
+        if (wait !== undefined || /rate limit/i.test(text)) {
+          throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
+        }
+      }
+      if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
+      throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
     }
-    if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
-    throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
   }
 
   return {
@@ -135,6 +154,18 @@ function client({ fetch, token }: GitHubOptions) {
       return new Uint8Array(await response.arrayBuffer());
     },
   };
+}
+
+/** Retries of a rate-limited request, each after at most this many seconds. */
+const MAX_RETRIES = 3;
+const MAX_RETRY_WAIT = 10;
+
+/** Seconds GitHub asks to wait: the Retry-After header, else "try again in 4.1s" in the message. */
+function retryAfter(response: Response, text: string): number | undefined {
+  const header = Number(response.headers.get('retry-after') ?? NaN);
+  if (Number.isFinite(header)) return header;
+  const match = /try again in ([\d.]+)s/i.exec(text);
+  return match ? Number(match[1]) : undefined;
 }
 
 function encodePath(path: string): string {
