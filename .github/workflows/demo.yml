@@ -1,0 +1,46 @@
+# Demo videos of the web view, for reviewers: every case of the demo-video skill, recorded on a pull request
+# that changes the product or the cases, kept as the run's artifact. Not a check: it scans live GitHub.
+name: Demo
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'skill-atlas'
+      - '.agents/skills/demo-video/**'
+      - '.github/workflows/demo.yml'
+  # To watch a demo again once a run's artifact has expired.
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: demo-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node .agents/skills/demo-video/record.ts --out demo-videos all
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-videos
+          path: demo-videos/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Summary
+        run: |
+          {
+            echo "## Demo videos"
+            echo "Every case, as \`<case>.webm\` with its last screen as \`<case>.png\`: [demo-videos](${{ steps.upload.outputs.artifact-url }})"
+            for video in demo-videos/*.webm; do echo "- \`$(basename "$video" .webm)\`"; done
+          } >> "$GITHUB_STEP_SUMMARY"

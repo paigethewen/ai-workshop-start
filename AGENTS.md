@@ -4,7 +4,8 @@ Read [./spec](spec/) first. Update it with the code.
 ## Tests
 Integration tests for every case in the spec. End-to-end tests in [e2e/](e2e/) scan real repositories, each pinned to a commit.
 ## Demo video
-A pull request that changes what the web view shows or does links a demo video of it: record and publish it with the [demo-video](.agents/skills/demo-video/SKILL.md) skill.
+A pull request with a product-changing feature or fix links a demo video of it, recorded by the [Demo workflow](.github/workflows/demo.yml): follow the [demo-video](.agents/skills/demo-video/SKILL.md) skill, which says what counts.
+Never commit binaries, videos included, to a branch.
 ## Definition of done
 - All tests pass locally
 - CI is green: [the CI workflow](.github/workflows/ci.yml) passes on the pushed branch or pull request
