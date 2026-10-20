@@ -215,6 +215,40 @@ test('a truncated GitHub tree without GITHUB_TOKEN finds root-level agent folder
   assert.match(result.warnings[0], /GITHUB_TOKEN/);
 });
 
+test('a /tree/<ref> URL scans that commit from its tree, even with GITHUB_TOKEN', async () => {
+  const commit = 'fedcba9876543210fedcba9876543210fedcba98';
+  const api = 'https://api.github.com/repos/JetBrains/pinned';
+  // What GitHub answers for a tag; there is no code search answer, so a search would fail the scan.
+  const pinned = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/pinned', default_branch: 'main' } },
+    [`${api}/commits/v1.0`]: { status: 200, body: { sha: commit } },
+    [`${api}/git/trees/${commit}?recursive=1`]: {
+      status: 200,
+      body: { truncated: false, tree: [{ path: '.claude/skills/commits/SKILL.md', mode: '100644', type: 'blob', sha: 'file' }] },
+    },
+    [`https://raw.githubusercontent.com/JetBrains/pinned/${commit}/.claude/skills/commits/SKILL.md`]: {
+      status: 200,
+      body: '---\nname: commits\ndescription: Write commit messages.\n---\n',
+    },
+  });
+  const result = await scan(await openGitHub('https://github.com/JetBrains/pinned/tree/v1.0', { fetch: pinned, token: 'test' }));
+  assert.deepEqual(
+    result.skills.map((skill) => `${skill.commit} ${skill.path}`),
+    [`${commit} .claude/skills/commits/SKILL.md`],
+  );
+});
+
+test('an unknown ref → a clear message, exit code 1', async () => {
+  const api = 'https://api.github.com/repos/JetBrains/pinned';
+  const unknown = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/pinned', default_branch: 'main' } },
+    [`${api}/commits/no-such-ref`]: { status: 404, body: { message: 'Not Found' } },
+  });
+  await assert.rejects(openGitHub('https://github.com/JetBrains/pinned/tree/no-such-ref', { fetch: unknown }), {
+    message: 'Not found in https://github.com/JetBrains/pinned: no-such-ref',
+  });
+});
+
 test('the CLI prints the result at once and stores nothing', (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'skill-atlas-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
