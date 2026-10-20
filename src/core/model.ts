@@ -10,6 +10,9 @@ export type Repository = {
   commit: string;
 };
 
+/** `own`: the repository's own workflow, in an agent folder. `shipped`: any other skill, usually for users. */
+export type SkillKind = 'own' | 'shipped';
+
 /** One skill. Its link is derived, by `skillLink`. */
 export type Skill = {
   /** `repo:path`, for example `JetBrains/kotlin:.claude/skills/x/SKILL.md`. */
@@ -20,7 +23,8 @@ export type Skill = {
   description: string;
   /** The scanned commit, the one the link pins; empty for a local directory. */
   commit: string;
-  /** The same skill in other agents' folders. */
+  kind: SkillKind;
+  /** The same skill elsewhere: in other agents' folders, or shipped. */
   copies: string[];
 };
 

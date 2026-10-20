@@ -25,10 +25,10 @@ A skill is a directory with a file named exactly `SKILL.md`; `skill.md` and `SKI
   - `JetBrains/MPS`: `plugins/mcp-tools/resources/…/skills/mps-aspect-generator/SKILL.md`
   - The parent need not be named `skills`; an unknown agent folder still counts, as **shipped**
 
-**Test data** is not counted, *without a warning*: any directory segment above the skill directory named `test`, `tests`, `__tests__`, `testdata`, `test-data`, `fixture`, `fixtures`, `__fixtures__`, `testResources` or `test-resources` (case-insensitive)
+**Test data** is not counted, *without a warning*: any directory in the path, the skill's own included, named `test`, `tests`, `__tests__`, `testdata`, `test-data`, `fixture`, `fixtures`, `__fixtures__`, `testResources` or `test-resources` (case-insensitive)
 - `src/test/resources/.claude/skills/x/SKILL.md`, `plugins/p/testData/skills/x/SKILL.md`, `fixture/.claude/skills/x/SKILL.md`
 - `resources` alone is *not* test data: plugins ship skills from it
-- The skill directory itself is not checked: `.claude/skills/test-runner/SKILL.md` counts
+- Whole names only: `.claude/skills/test-runner/SKILL.md` counts, `fixture/SKILL.md` does not
 ## Copies
 The same skill is often kept in several places: `.claude/skills/x` for Claude and `.agents/skills/x` for Codex, or a plugin that ships the repository's own skill.
 - **own** skills with the same `<base>` and the same `<dir>` → **one skill**, whatever their bytes; differing bytes → a *warning* naming both paths

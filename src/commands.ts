@@ -14,7 +14,7 @@ export type Context = {
 
 const usage = `Usage: skill-atlas <command>
 
-  scan <GitHub URL | directory>   find every SKILL.md in a repository and print it
+  scan <GitHub URL | directory>   find every unique skill in a repository and print it
   help                            show this help`;
 
 /** Runs one command; returns its exit code. */
@@ -39,13 +39,21 @@ async function scanCommand(args: string[], context: Context) {
   for (const warning of result.warnings) context.error(`warning: ${warning}`);
 }
 
-/** `<owner>/<repo> · N skills`, then each skill's name, first sentence and link. */
+/** `<owner>/<repo> · N skills: A own, B shipped`, then each kind's skills: name, first sentence and link. */
 function printRepository(repository: Repository, skills: Skill[], { print }: Context) {
-  print(`${repository.id} · ${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`);
-  for (const skill of skills) {
-    print(skill.description ? `${skill.name} — ${firstSentence(skill.description)}` : skill.name);
-    print(`  ${skillLink(repository, skill)}`);
-    if (skill.copies.length > 0) print(`  also in ${skill.copies.join(', ')}`);
+  const sections = [
+    { heading: 'Own', kind: 'own', skills: skills.filter((skill) => skill.kind === 'own') },
+    { heading: 'Shipped', kind: 'shipped', skills: skills.filter((skill) => skill.kind === 'shipped') },
+  ].filter((section) => section.skills.length > 0);
+  const counts = sections.map((section) => `${section.skills.length} ${section.kind}`).join(', ');
+  print(`${repository.id} · ${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}${counts && `: ${counts}`}`);
+  for (const section of sections) {
+    print(section.heading);
+    for (const skill of section.skills) {
+      print(skill.description ? `${skill.name} — ${firstSentence(skill.description)}` : skill.name);
+      print(`  ${skillLink(repository, skill)}`);
+      if (skill.copies.length > 0) print(`  also in ${skill.copies.join(', ')}`);
+    }
   }
 }
 
