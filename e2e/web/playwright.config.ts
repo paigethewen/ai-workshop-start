@@ -22,6 +22,10 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}/`,
     browserName: 'chromium',
+    // One way to draw a pixel: in software, without the CPU's own Skia paths (runners differ), in sRGB, no LCD text.
+    launchOptions: {
+      args: ['--disable-gpu', '--disable-gpu-rasterization', '--disable-skia-runtime-opts', '--force-color-profile=srgb', '--disable-lcd-text', '--font-render-hinting=none'],
+    },
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 1,
     colorScheme: 'light',

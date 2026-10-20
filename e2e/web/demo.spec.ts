@@ -11,15 +11,17 @@ const pause = (page: Page, ms = 2000) => page.waitForTimeout(ms);
 
 /**
  * A key moment: the page as it is now, the same as its baseline. Soft: the case goes on, so every changed moment
- * shows. Without a baseline Playwright takes no screenshot: the moment is attached as its `-actual`, for review.
+ * shows. Without a baseline Playwright takes no screenshot: the moment is attached as its `-actual`, for review,
+ * after the comparison, so the comparison is timed as when the baselines are taken.
  */
 async function moment(page: Page, name: string) {
-  if (!existsSync(test.info().snapshotPath(`${name}.png`, { kind: 'screenshot' }))) {
+  const missing = !existsSync(test.info().snapshotPath(`${name}.png`, { kind: 'screenshot' }));
+  await expect.soft(page).toHaveScreenshot(`${name}.png`);
+  if (missing && test.info().config.updateSnapshots === 'none') {
     const path = test.info().outputPath(`${name}-actual.png`);
     await page.screenshot({ path, animations: 'disabled', caret: 'hide' });
     await test.info().attach(`${name}-actual.png`, { path, contentType: 'image/png' });
   }
-  await expect.soft(page).toHaveScreenshot(`${name}.png`);
 }
 
 // Waits for what a scan shows; a scan that fails shows its error instead, and the case fails at once with it.
