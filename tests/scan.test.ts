@@ -161,10 +161,11 @@ test('./fixture warns only about the malformed skill, the differing copies and t
   assert.ok(warnings().some((line) => /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /.test(line)));
 });
 
-test('this repository has no skills of its own: fixture/ is test data, so the count is 0 and the exit code 0', async () => {
+test('this repository has only its own code-review skill: fixture/ is test data, so the count is 1 and the exit code 0', async () => {
   const scanned = await atlas(['scan', REPOSITORY]);
   assert.equal(scanned.code, 0, scanned.stderr);
-  assert.match(scanned.stdout, /^\S+ · 0 skills$/);
+  assert.match(scanned.stdout, /^\S+ · 1 skill$/m);
+  assert.match(scanned.stdout, /^code-review — /m);
 });
 
 test('a truncated GitHub tree without GITHUB_TOKEN finds root-level agent folders and warns that nested ones were skipped', async () => {
