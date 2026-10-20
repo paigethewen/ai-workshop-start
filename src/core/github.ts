@@ -63,7 +63,7 @@ async function treePaths(github: Client, id: string, sha: string, warnings: stri
   const tree = await github.json<Tree>(`${API}/repos/${id}/git/trees/${sha}?recursive=1`);
   if (!tree.truncated) return files(tree);
   warnings.push(
-    `the tree is too large to list at once; looked only in ${SKILL_ROOTS.join(', ')} at the root, so nested and shipped skills were skipped (GITHUB_TOKEN searches everywhere)`,
+    `the tree is too large to list at once; looked only in ${SKILL_ROOTS.join(', ')} at the root, so nested ones were skipped (GITHUB_TOKEN searches everywhere)`,
   );
   const paths: string[] = [];
   for (const root of SKILL_ROOTS) {

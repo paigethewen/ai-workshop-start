@@ -20,23 +20,19 @@ const ROOT = pathToFileURL(FIXTURE).href;
 const fixture = await atlas(['scan', FIXTURE]);
 const example = await atlas(['scan', 'github.com/JetBrains/example']);
 
-/** The lines of one section of the fixture's output, `Own` or `Shipped`, without its heading. */
-function section(heading: 'Own' | 'Shipped'): string[] {
-  const lines = fixture.stdout.split('\n');
-  const start = lines.indexOf(heading);
-  assert.notEqual(start, -1, `no ${heading} section in:\n${fixture.stdout}`);
-  const end = lines.findIndex((line, index) => index > start && (line === 'Own' || line === 'Shipped'));
-  return lines.slice(start + 1, end < 0 ? undefined : end);
-}
-
-/** The printed skill whose link is the fixture's `path`: its name line, link and `also in` line, if any. */
-function entry(path: string): { heading: string; name: string; also?: string } {
+/** The printed skill whose link is the fixture's `path`: its name line and its `also in` line, if any. */
+function entry(path: string): { name: string; also?: string } {
   const lines = fixture.stdout.split('\n');
   const index = lines.indexOf(`  ${ROOT}/${path}`);
   assert.notEqual(index, -1, `${path} is not printed as a skill:\n${fixture.stdout}`);
-  const heading = lines.slice(0, index).findLast((line) => line === 'Own' || line === 'Shipped') ?? '';
   const also = lines[index + 1]?.startsWith('  also in ') ? lines[index + 1].slice('  also in '.length) : undefined;
-  return { heading, name: lines[index - 1], also };
+  return { name: lines[index - 1], also };
+}
+
+/** Neither printed nor warned about. */
+function assertNotCounted(text: string) {
+  assert.ok(!fixture.stdout.includes(text), `${text} is printed:\n${fixture.stdout}`);
+  assert.ok(!fixture.stderr.includes(text), `${text} is warned about:\n${fixture.stderr}`);
 }
 
 function warnings(): string[] {
@@ -58,21 +54,19 @@ test('scan prints the repository, then each skill with its first sentence and pi
   assert.equal(
     example.stdout,
     [
-      'JetBrains/example · 1 skill: 1 own',
-      'Own',
+      'JetBrains/example · 1 skill',
       'commits — Write commit messages the way this repository does.',
       `  https://github.com/JetBrains/example/blob/${EXAMPLE_COMMIT}/.claude/skills/commits/SKILL.md`,
     ].join('\n'),
   );
 });
 
-test('./fixture: unique skills, own then shipped, each sorted by name, linked to their files, with copies', () => {
+test('./fixture: every unique skill in an agent folder, sorted by name, linked to its file, with its copies', () => {
   assert.equal(fixture.code, 0, fixture.stderr);
   assert.equal(
     fixture.stdout,
     [
-      'fixture · 11 skills: 7 own, 4 shipped',
-      'Own',
+      'fixture · 7 skills',
       'code-review — Review a change before it is merged.',
       `  ${ROOT}/.cursor/skills/review/SKILL.md`,
       "code-style — Follow the project's code style.",
@@ -80,7 +74,7 @@ test('./fixture: unique skills, own then shipped, each sorted by name, linked to
       '  also in .github/skills/code-style/SKILL.md',
       'commits — Write commit messages the way this repository does.',
       `  ${ROOT}/.agents/skills/commits/SKILL.md`,
-      '  also in .claude/skills/commits/SKILL.md, plugins/tools/skills/commits/SKILL.md',
+      '  also in .claude/skills/commits/SKILL.md, .junie/skills/commits/SKILL.md',
       'commits — Write commit messages for the editor module.',
       `  ${ROOT}/modules/editor/.claude/skills/commits/SKILL.md`,
       'release-checklist',
@@ -89,71 +83,48 @@ test('./fixture: unique skills, own then shipped, each sorted by name, linked to
       `  ${ROOT}/.claude/skills/test-runner/SKILL.md`,
       'writing-lint-checks — Write Android Lint checks.',
       `  ${ROOT}/agent/skills/writing-lint-checks/SKILL.md`,
-      'Shipped',
-      'aspect-generator — Generate MPS language aspects.',
-      `  ${ROOT}/plugins/mcp-tools/resources/META-INF/skills/aspect-generator/SKILL.md`,
-      "code-style — Follow the plugin's code style.",
-      `  ${ROOT}/plugins/style/skills/code-style/SKILL.md`,
-      'deploy — Deploy the app.',
-      `  ${ROOT}/.windsurf/skills/deploy/SKILL.md`,
-      'fixture — The fixture as a skill of its own.',
-      `  ${ROOT}/SKILL.md`,
     ].join('\n'),
   );
 });
 
 test('a skill kept for both Claude and Codex is counted once, the other folder listed under also in', () => {
-  const commits = entry('.agents/skills/commits/SKILL.md');
-  assert.match(commits.also ?? '', /(^|, )\.claude\/skills\/commits\/SKILL\.md(,|$)/);
+  assert.match(entry('.agents/skills/commits/SKILL.md').also ?? '', /(^|, )\.claude\/skills\/commits\/SKILL\.md(,|$)/);
   assert.ok(!fixture.stdout.includes(`  ${ROOT}/.claude/skills/commits/SKILL.md`), 'the Claude copy is printed as a skill of its own');
 });
 
-test('own copies whose bytes differ are one skill, with a warning naming both paths', () => {
-  assert.deepEqual(entry('.codex/skills/code-style/SKILL.md').also, '.github/skills/code-style/SKILL.md');
+test('copies whose bytes differ are one skill, with a warning naming both paths', () => {
+  assert.equal(entry('.codex/skills/code-style/SKILL.md').also, '.github/skills/code-style/SKILL.md');
   const differ = warnings().filter((line) => line.includes('.codex/skills/code-style/SKILL.md'));
   assert.equal(differ.length, 1, fixture.stderr);
   assert.match(differ[0], /\.github\/skills\/code-style\/SKILL\.md/);
   assert.match(differ[0], /differ/);
 });
 
-test('a shipped skill that differs from an own skill only in line endings is its copy, and the own one is printed', () => {
-  const commits = entry('.agents/skills/commits/SKILL.md');
-  assert.equal(commits.heading, 'Own');
-  assert.match(commits.also ?? '', /(^|, )plugins\/tools\/skills\/commits\/SKILL\.md$/);
-  assert.ok(!fixture.stdout.includes(`  ${ROOT}/plugins/tools/skills/commits/SKILL.md`), 'the shipped copy is printed as a skill of its own');
+test('a copy that differs only in line endings is a copy, without a warning', () => {
+  assert.match(entry('.agents/skills/commits/SKILL.md').also ?? '', /(^|, )\.junie\/skills\/commits\/SKILL\.md$/);
+  assert.ok(!fixture.stderr.includes('.junie'), fixture.stderr);
 });
 
-test('the same skill directory in a nested package is a separate own skill', () => {
+test('a shipped copy of a skill is neither counted nor listed as a copy', () => {
+  assertNotCounted('plugins/tools');
+});
+
+test('the same skill directory in a nested package is a separate skill', () => {
   const editor = entry('modules/editor/.claude/skills/commits/SKILL.md');
-  assert.equal(editor.heading, 'Own');
   assert.equal(editor.name, 'commits — Write commit messages for the editor module.');
   assert.equal(editor.also, undefined);
 });
 
-test('the same skill directory shipped with different bytes is a separate shipped skill', () => {
-  const style = entry('plugins/style/skills/code-style/SKILL.md');
-  assert.equal(style.heading, 'Shipped');
-  assert.equal(style.also, undefined);
-  assert.ok(!(entry('.codex/skills/code-style/SKILL.md').also ?? '').includes('plugins/'), 'the plugin is listed as an own copy');
+test('agent/skills without a leading dot is an agent folder', () => {
+  assert.equal(entry('agent/skills/writing-lint-checks/SKILL.md').name, 'writing-lint-checks — Write Android Lint checks.');
 });
 
-test('agent/skills without a leading dot is the repository own workflow', () => {
-  assert.equal(entry('agent/skills/writing-lint-checks/SKILL.md').heading, 'Own');
+test('skills shipped to users are not counted: plugin resources, plugin skills folders and skills collections', () => {
+  for (const name of ['aspect-generator', 'plugins/style/skills/code-style', 'collection']) assertNotCounted(name);
 });
 
-test('a skill inside a plugin resources directory is shipped', () => {
-  assert.equal(entry('plugins/mcp-tools/resources/META-INF/skills/aspect-generator/SKILL.md').heading, 'Shipped');
-});
-
-test('a skill in an unknown agent folder still counts, as shipped', () => {
-  assert.equal(entry('.windsurf/skills/deploy/SKILL.md').heading, 'Shipped');
-});
-
-test('a SKILL.md at the root without a name is a shipped skill named after the repository that does not own the skills below it', () => {
-  const root = entry('SKILL.md');
-  assert.equal(root.heading, 'Shipped');
-  assert.equal(root.name, 'fixture — The fixture as a skill of its own.');
-  assert.equal(section('Own').length, 16, 'the root skill swallowed the own skills below it');
+test('a skills folder that is not an agent folder is not counted', () => {
+  assertNotCounted('deploy');
 });
 
 test('a front matter name that is not the directory name is printed, with a warning', () => {
@@ -164,29 +135,25 @@ test('a front matter name that is not the directory name is printed, with a warn
 });
 
 test('skills under test data directories are neither counted nor warned about', () => {
-  for (const name of ['test-data-skill', 'test-data-plugin', 'test-data-fixture']) {
-    assert.ok(!fixture.stdout.includes(name), `${name} is printed:\n${fixture.stdout}`);
-    assert.ok(!fixture.stderr.includes(name), `${name} is warned about:\n${fixture.stderr}`);
-  }
+  for (const name of ['test-data-skill', 'test-data-plugin', 'test-data-fixture']) assertNotCounted(name);
 });
 
 test('a skill directory named like test data is counted', () => {
-  assert.equal(entry('.claude/skills/test-runner/SKILL.md').heading, 'Own');
+  assert.equal(entry('.claude/skills/test-runner/SKILL.md').name, 'test-runner — Run the tests the way CI does.');
 });
 
-test('a SKILL.md inside another skill belongs to it and is not counted', () => {
-  assert.ok(!fixture.stdout.includes('test-runner/examples'), fixture.stdout);
+test('a SKILL.md inside a skill belongs to it and is not counted', () => {
+  assertNotCounted('test-runner/examples');
   assert.ok(!fixture.stdout.split('\n').some((line) => line.startsWith('example')), fixture.stdout);
 });
 
 test('only files named exactly SKILL.md are skills', () => {
-  assert.ok(!fixture.stdout.includes('lowercase'), fixture.stdout);
-  assert.ok(!fixture.stdout.includes('backup'), fixture.stdout);
+  assertNotCounted('lowercase');
+  assertNotCounted('backup');
 });
 
 test('a symlinked agent folder is neither counted nor listed as a copy', () => {
-  assert.ok(!fixture.stdout.includes('.gemini'), fixture.stdout);
-  assert.ok(!fixture.stderr.includes('.gemini'), fixture.stderr);
+  assertNotCounted('.gemini');
 });
 
 test('./fixture warns only about the malformed skill, the differing copies and the mismatched name', () => {
@@ -200,7 +167,7 @@ test('this repository has no skills of its own: fixture/ is test data, so the co
   assert.match(scanned.stdout, /^\S+ · 0 skills$/);
 });
 
-test('a truncated GitHub tree without GITHUB_TOKEN finds root-level agent folders and warns that nested and shipped skills were skipped', async () => {
+test('a truncated GitHub tree without GITHUB_TOKEN finds root-level agent folders and warns that nested ones were skipped', async () => {
   const commit = '0123456789abcdef0123456789abcdef01234567';
   const api = 'https://api.github.com/repos/JetBrains/huge';
   // What GitHub answers for a repository whose tree is too large for one answer.
@@ -244,7 +211,7 @@ test('a truncated GitHub tree without GITHUB_TOKEN finds root-level agent folder
   );
   assert.equal(result.warnings.length, 1, result.warnings.join('\n'));
   assert.match(result.warnings[0], /too large/);
-  assert.match(result.warnings[0], /nested and shipped skills/);
+  assert.match(result.warnings[0], /nested ones were skipped/);
   assert.match(result.warnings[0], /GITHUB_TOKEN/);
 });
 
