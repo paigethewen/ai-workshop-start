@@ -21,7 +21,7 @@ Videos live only there, never on a branch or in a release: never commit a video,
 - `scan-organization`: scan `modelcontextprotocol`, open one of its repositories, go back to the organization
 
 When no case shows the pull request's feature, add one named after it, built like the others: start from a scan, act through the page's own controls (`#repo`, `#filter`, the list's links, the tabs), wait for what the page shows before each pause, and end on the page that proves the feature.
-Pick a repository whose skills make the feature visible; one under 20 seconds of scanning keeps the video short, and a small organization keeps CI under GitHub's secondary rate limit (90 repositories tripped it, 45 do not). Keep the existing cases: they show the features merged so far.
+Pick a repository whose skills make the feature visible; one under 20 seconds of scanning keeps the video short. Keep the existing cases: they show the features merged so far.
 
 ## 2. Try it locally
 
@@ -52,4 +52,5 @@ GitHub plays a video inline only when a person drags it into the description; th
 Artifacts expire after 90 days; to watch a demo later, run the workflow again on the branch or on `main` from the Actions tab.
 When the feature changes after review, the new push records again: link the new run in the reply.
 
+A case that hits GitHub's rate limit is recorded again after a minute, up to 3 times; any other failure fails the run at once, with the page's error in the log and the page as `<case>-failed.png` in the artifact.
 If the Demo run fails, read its log and fix the cause; never link a run whose recording failed.
