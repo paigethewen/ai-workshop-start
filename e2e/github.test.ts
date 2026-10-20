@@ -1,5 +1,5 @@
 // The real CLI against real JetBrains repositories on live GitHub. Each scan is pinned to a commit, so
-// what it prints cannot change under the test; only the code-search test reads a default branch.
+// what it prints cannot change under the test, and none uses code search, whose limit CI runs share.
 // Needs network access and GITHUB_TOKEN.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -101,12 +101,15 @@ test('JetBrains/MPS: each skill kept for Codex and Claude is counted once, the .
   assert.equal(scanned.stderr, TRUNCATED);
 });
 
-test('JetBrains/MPS through code search: the skill a plugin ships is listed, but neither counted nor a copy', { timeout: 60_000 }, async () => {
-  assert.ok(TOKEN, 'set GITHUB_TOKEN: code search needs it');
-  const source = await openGitHub('https://github.com/JetBrains/MPS', { fetch, token: TOKEN });
+test('JetBrains/MPS: the skill a plugin ships is neither counted nor a copy, though its name matches a counted skill', { timeout: 60_000 }, async () => {
+  assert.ok(TOKEN, 'set GITHUB_TOKEN: the end-to-end tests read live GitHub');
+  const source = await openGitHub(`https://github.com/JetBrains/MPS/tree/${MPS}`, { fetch, token: TOKEN });
+  // The truncated tree leaves the plugins out; the plugin's real SKILL.md goes back into the listing,
+  // so leaving it out is the scan's decision.
   const shipped = 'plugins/mcp-tools/resources/jetbrains/mps/agents/mcp/skills/mps-aspect-generator/SKILL.md';
-  assert.ok(source.paths.includes(shipped), `code search no longer lists ${shipped}`);
-  const result = await scan(source);
+  assert.ok(!source.paths.includes(shipped), 'the tree is listed whole now: drop the added path');
+  assert.ok(await source.read(shipped), `${shipped} is not in JetBrains/MPS at ${MPS}`);
+  const result = await scan({ ...source, paths: [...source.paths, shipped] });
   const generator = result.skills.filter((skill) => skill.name === 'mps-aspect-generator');
   assert.deepEqual(
     generator.map(({ path, copies }) => ({ path, copies })),
@@ -114,4 +117,5 @@ test('JetBrains/MPS through code search: the skill a plugin ships is listed, but
   );
   const shippedPaths = result.skills.flatMap((skill) => [skill.path, ...skill.copies]).filter((path) => path.startsWith('plugins/'));
   assert.deepEqual(shippedPaths, []);
+  assert.equal(result.skills.length, 42);
 });
