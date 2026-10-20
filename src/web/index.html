@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill Atlas</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Skill Atlas</h1>
+    <form id="scan">
+      <input id="repo" name="repo" type="text" required autocomplete="off" spellcheck="false"
+             placeholder="https://github.com/JetBrains/kotlin, or a local directory" aria-label="Repository">
+      <button type="submit">Scan</button>
+    </form>
+  </header>
+  <p id="status" role="status"></p>
+  <details id="warnings" hidden><summary></summary><ul></ul></details>
+  <main id="results" hidden>
+    <nav aria-label="Skills"><h2 id="summary"></h2><ul id="skills"></ul></nav>
+    <article id="skill" hidden>
+      <header>
+        <h2 id="skill-name"></h2>
+        <p id="skill-description"></p>
+        <p class="meta"><a id="skill-link" target="_blank" rel="noreferrer noopener"></a></p>
+        <p class="meta" id="skill-copies"></p>
+        <dl id="skill-properties"></dl>
+      </header>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-view="rendered" aria-selected="true">Rendered</button>
+        <button type="button" role="tab" data-view="source" aria-selected="false">SKILL.md</button>
+      </div>
+      <div id="skill-rendered" class="markdown"></div>
+      <pre id="skill-source" hidden></pre>
+    </article>
+  </main>
+</body>
+</html>
