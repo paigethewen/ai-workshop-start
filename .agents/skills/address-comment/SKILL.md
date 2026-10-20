@@ -30,6 +30,8 @@ gh api -i -X POST repos/{owner}/{repo}/issues/<number>/reactions -f content=eyes
 - `201 Created`: the pull request is yours; keep the reaction `id` to release it.
 - `200 OK`: another run holds it; skip this pull request. If the returned reaction's `created_at` is over 45 minutes old, that run died: delete the reaction and claim again.
 
+Read JSON fields with `gh`'s built-in `--jq`; the `jq` command may not be installed.
+
 Release the claim when done with the pull request, whatever the outcome, including when there was nothing to do or a step failed:
 
 ```bash
