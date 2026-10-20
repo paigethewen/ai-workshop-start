@@ -1,0 +1,3 @@
+# Keeps the CRLF copies byte-for-byte: they test that line endings alone do not make copies differ.
+.junie/skills/commits/SKILL.md -text
+plugins/tools/skills/commits/SKILL.md -text

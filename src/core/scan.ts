@@ -17,20 +17,31 @@ export type ScanResult = { repository: Repository; skills: Skill[]; warnings: st
 
 /** fetch → find → parse. Nothing is stored: the result is all there is. */
 export async function scan(source: Source): Promise<ScanResult> {
-  const files = findSkills(source.paths, source.repository.name);
+  const files = findSkills(source.paths);
   // The files are read at the same time: on GitHub, each one is a request.
   const results = await Promise.all(files.map((file) => readSkill(source, file)));
   return {
     repository: source.repository,
     skills: sortSkills(results.flatMap((result) => (result.skill ? [result.skill] : []))),
-    warnings: [...source.warnings, ...results.flatMap((result) => (result.warning ? [result.warning] : []))],
+    warnings: [...source.warnings, ...results.flatMap((result) => result.warnings)],
   };
 }
 
-async function readSkill(source: Source, file: SkillFile): Promise<{ skill?: Skill; warning?: string }> {
-  const bytes = await source.read(file.path);
-  if (!bytes) return { warning: `${file.path}: listed, but not found at the scanned commit; skipped` };
-  const parsed = parseSkill(new TextDecoder().decode(bytes));
+async function readSkill(source: Source, file: SkillFile): Promise<{ skill?: Skill; warnings: string[] }> {
+  const [bytes, ...copies] = await Promise.all([file.path, ...file.copies].map((path) => source.read(path)));
+  if (!bytes) return { warnings: [`${file.path}: listed, but not found at the scanned commit; skipped`] };
+  const text = new TextDecoder().decode(bytes);
+  const parsed = parseSkill(text);
+  const warnings: string[] = [];
+  if (parsed.warning) warnings.push(`${file.path}: ${parsed.warning}`);
+  if (parsed.name && parsed.name !== file.name) {
+    warnings.push(`${file.path}: the front matter name ${parsed.name} is not the directory name ${file.name}`);
+  }
+  file.copies.forEach((copy, index) => {
+    if (copies[index] && normalized(new TextDecoder().decode(copies[index])) !== normalized(text)) {
+      warnings.push(`${file.path} and ${copy}: copies differ; using ${file.path}`);
+    }
+  });
   const skill: Skill = {
     id: `${source.repository.id}:${file.path}`,
     repository: source.repository.id,
@@ -40,5 +51,10 @@ async function readSkill(source: Source, file: SkillFile): Promise<{ skill?: Ski
     commit: source.repository.commit,
     copies: file.copies,
   };
-  return { skill, warning: parsed.warning && `${file.path}: ${parsed.warning}` };
+  return { skill, warnings };
+}
+
+/** Line endings aside. */
+function normalized(text: string): string {
+  return text.replace(/\r\n/g, '\n');
 }
