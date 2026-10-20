@@ -108,6 +108,11 @@ jobs:
           path: ${{ steps.baseline.outputs.artifact-id && 'visual-baseline' || 'screenshots' }}/*.png
           if-no-files-found: error
           retention-days: 90
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: selftest-screenshots
+          path: screenshots/*.png
       - name: Summary
         if: ${{ !cancelled() }}
         env:
