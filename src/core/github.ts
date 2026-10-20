@@ -117,17 +117,27 @@ function client({ fetch, token }: GitHubOptions) {
   }
 
   async function request(url: string, notFound: string): Promise<unknown> {
-    const response = await get(url, { headers });
-    if (response.ok) return response.json();
-    const body: unknown = await response.json().catch(() => undefined);
-    const message = (body as { message?: unknown } | undefined)?.message;
-    const text = typeof message === 'string' ? message : '';
-    if (response.status === 404) throw new AtlasError(notFound);
-    if ((response.status === 403 || response.status === 429) && /rate limit/i.test(text)) {
-      throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
+    for (let attempt = 0; ; attempt++) {
+      const response = await get(url, { headers });
+      if (response.ok) return response.json();
+      const body: unknown = await response.json().catch(() => undefined);
+      const message = (body as { message?: unknown } | undefined)?.message;
+      const text = typeof message === 'string' ? message : '';
+      if (response.status === 404) throw new AtlasError(notFound);
+      if (response.status === 403 || response.status === 429) {
+        // A short secondary limit, as code search gives shared runners, passes in seconds.
+        const wait = retryAfter(response, text);
+        if (wait !== undefined && wait <= MAX_RETRY_WAIT && attempt < MAX_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+          continue;
+        }
+        if (wait !== undefined || /rate limit/i.test(text)) {
+          throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
+        }
+      }
+      if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
+      throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
     }
-    if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
-    throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
   }
 
   return {
@@ -144,6 +154,18 @@ function client({ fetch, token }: GitHubOptions) {
       return new Uint8Array(await response.arrayBuffer());
     },
   };
+}
+
+/** Retries of a rate-limited request, each after at most this many seconds. */
+const MAX_RETRIES = 3;
+const MAX_RETRY_WAIT = 10;
+
+/** Seconds GitHub asks to wait: the Retry-After header, else "try again in 4.1s" in the message. */
+function retryAfter(response: Response, text: string): number | undefined {
+  const header = Number(response.headers.get('retry-after') ?? NaN);
+  if (Number.isFinite(header)) return header;
+  const match = /try again in ([\d.]+)s/i.exec(text);
+  return match ? Number(match[1]) : undefined;
 }
 
 function encodePath(path: string): string {

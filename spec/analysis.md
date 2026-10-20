@@ -12,6 +12,7 @@ Skill: id = `repo:path`, name, description, commit, copies
 - The link pins the *scanned commit*
 - Malformed front matter → a *warning*, the scan goes on
 - Unreachable repository → a clear message, exit code 1
+- A short GitHub rate limit, at most 10 s by `Retry-After` or *try again in N s*, → retried, up to 3 times; a longer one → the rate-limit message, exit code 1
 ## What counts as a skill
 Only `<base>/<agent folder>/skills/<dir>/SKILL.md`: the skills agents read while working in the repository.
 - Agent folders: `.agents`, `.agent`, `agent`, `.claude`, `.codex`, `.cursor`, `.github`, `.gemini`, `.junie`
