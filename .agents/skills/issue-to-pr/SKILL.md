@@ -65,3 +65,4 @@ Push and open the pull request against `main`:
 
 Wait for [CI](../../../.github/workflows/ci.yml) on the pull request. If it fails, read the log, fix the cause, push, and wait again until it is green.
 The work is done when the pull request is open and CI is green; do not merge it: a human reviews and merges.
+Opening it starts the code-review automation, whose review starts the [address-comment](../address-comment/SKILL.md) automation: do not watch for review yourself.

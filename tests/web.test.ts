@@ -174,6 +174,7 @@ test('the page is served with a policy that runs only its own scripts', async (t
   assert.match(html, /<main id="organization"/);
   assert.equal((await view.get('/app.js')).status, 200);
   assert.equal((await view.get('/style.css')).status, 200);
+  assert.equal((await view.get('/filter.js')).status, 200);
   assert.equal((await view.get('/no-such-file')).status, 404);
 });
 

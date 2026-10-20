@@ -11,7 +11,8 @@ Enter `https://github.com/<owner>`: the page lists the organization's repositori
 - The **same skills** as `scan`: the same count, order, names, descriptions' *first sentence*, links and warnings
 - `<repo> · N skills`, with the scanned commit; the warnings, folded, above it
 - Each skill: its name, `×N` for N copies in all, the first sentence, and a badge per agent that reads it (`.claude` → Claude, `.github` → Copilot, …) and for a nested package, its `<base>`
-- A filter: the skills whose name, description or path has every word typed
+- A filter: the skills whose name, description, path or `SKILL.md` has every word typed, in any case; no words → every skill
+- Each word typed is marked where the list shows it; a skill that matches outside its name and first sentence shows the first line of its `SKILL.md` that does
 - No skills → a note on where skills live
 - An unreachable repository → its `scan` message on the page
 ## An organization
@@ -23,6 +24,7 @@ Enter `https://github.com/<owner>`: the page lists the organization's repositori
 - An unknown owner, a rate limit, a rejected token or GitHub out of reach → its `scan` message on the page
 ## A skill
 - Its name, description, link and *copies*; the other front matter keys
+- The filter's words marked in all of them, in the rendered body and in the `SKILL.md`
 - The body after the front matter, **rendered** as Markdown; the `SKILL.md` as it is, one tab over, and a button that copies it
 - A GitHub link opens the file at the *scanned commit*; a local `file://` link is shown as text
 - The address keeps the repository or the owner in `?repo=` and the open skill in `#<path>`: a reload shows the same

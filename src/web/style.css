@@ -119,6 +119,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .item-title { display: flex; align-items: center; gap: 0.45rem; font-weight: 600; font-size: 0.95rem; }
 .count { padding: 0 0.4rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 0.72rem; font-weight: 500; }
 .item-description { color: var(--muted); font-size: 0.84rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.item-match { min-width: 0; color: var(--muted); font-family: var(--mono); font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+mark { padding: 0 0.1em; border-radius: 3px; background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; }
 .badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .badge { padding: 0.05rem 0.5rem; border-radius: 6px; background: var(--accent-soft); color: var(--accent-text); font-size: 0.72rem; font-weight: 600; }
 .badge.package { background: var(--surface-2); color: var(--muted); font-family: var(--mono); font-weight: 500; }
