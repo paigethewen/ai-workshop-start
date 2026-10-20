@@ -64,11 +64,5 @@ Push and open the pull request against `main`:
 - Link the pull request on the issue if `Closes` does not do it
 
 Wait for [CI](../../../.github/workflows/ci.yml) on the pull request. If it fails, read the log, fix the cause, push, and wait again until it is green.
-Do not merge it: a human reviews and merges.
-
-## 8. Watch for review
-
-For an hour after CI is green, check the pull request every 4 minutes: wait with `sleep 240` as a foreground command, then run [address-comment](../address-comment/SKILL.md) on the pull request.
-Stop early when the pull request is merged or closed (`gh pr view <number> --json state`).
-After the hour the address-comment automation takes over; the skill's claim and markers keep the two from handling the same comment twice.
-The work is done when the hour is over, or the pull request is merged or closed.
+The work is done when the pull request is open and CI is green; do not merge it: a human reviews and merges.
+Opening it starts the code-review automation, whose review starts the [address-comment](../address-comment/SKILL.md) automation: do not watch for review yourself.
