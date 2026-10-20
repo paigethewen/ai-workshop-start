@@ -13,10 +13,21 @@ build-tools-bump-gradle-api — Bumps the Gradle API version that Kotlin Gradle 
 …
 ```
 
+A whole organization or user, `./skill-atlas scan https://github.com/<owner>`, counts the skills in each of its
+repositories, forks aside:
+
+```console
+$ ./skill-atlas scan https://github.com/anthropics
+anthropics · 9 of 90 repositories with skills
+anthropics/defending-code-reference-harness · 9 skills
+anthropics/cwc-workshops · 8 skills
+…
+```
+
 Or browse them: `./skill-atlas serve` opens a web view on <http://127.0.0.1:4173/>. Enter a GitHub URL or a local
 directory, then pick a skill to read its `SKILL.md`, rendered or as it is. `--port <port>` picks another port.
 
-Set `GITHUB_TOKEN` for a higher GitHub rate limit. `npm test` runs the tests.
+Set `GITHUB_TOKEN` for a higher GitHub rate limit: an organization of more than a few dozen repositories needs it. `npm test` runs the tests.
 
 - [spec/](spec/): what it does; [spec/web.md](spec/web.md): the web view. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.
