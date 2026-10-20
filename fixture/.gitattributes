@@ -1,0 +1,2 @@
+# Keeps the CRLF copy byte-for-byte: it tests that line endings do not split copies.
+plugins/tools/skills/commits/SKILL.md -text
