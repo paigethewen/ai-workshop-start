@@ -4,6 +4,8 @@ name: CI
 on:
   push:
   pull_request:
+  # The Screenshots workflow runs CI again on the baselines it commits: its own push does not.
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -45,3 +47,79 @@ jobs:
       - run: npm run test:e2e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # The web tests: the demo cases in Chromium, in the image of e2e/web/Dockerfile, with GitHub replayed from
+  # e2e/web/github.json. Every run is recorded; a screenshot one pixel off its baseline fails, and its
+  # before, after and diff go to the run's summary and to the pull request, for a person to review.
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Only a person, through the accept-screenshots label, changes a baseline: never a commit of the branch.
+      - name: Baselines from the Screenshots workflow only
+        run: |
+          authors=$(git log --format='%an' "origin/${{ github.event.repository.default_branch }}..${{ github.event.pull_request.head.sha || github.sha }}" -- e2e/web/screenshots | sort -u | grep -vxF 'github-actions[bot]' || true)
+          if [ -n "$authors" ]; then
+            echo "::error::e2e/web/screenshots changed in commits by $authors. Baselines change only through the accept-screenshots label: drop those changes."
+            exit 1
+          fi
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: echo "${{ github.token }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      # The tests' image, from GHCR; the first run of a new Dockerfile builds and publishes it, but not a fork's.
+      - run: npm run e2e
+        env:
+          SKILL_ATLAS_WEB_PUSH: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '1' || '' }}
+      - id: videos
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-videos
+          path: test-results/**/*.webm
+          retention-days: 30
+      - id: report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-report
+          path: playwright-report/
+          retention-days: 30
+      - name: Screenshot differences
+        if: ${{ !cancelled() && hashFiles('playwright-report/results.json') != '' }}
+        run: node e2e/web/report.ts > /dev/null
+      - id: diffs
+        if: ${{ !cancelled() && hashFiles('screenshot-diffs/**') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshot-diffs
+          path: screenshot-diffs/
+          retention-days: 30
+      - name: Post them
+        if: ${{ !cancelled() && hashFiles('playwright-report/results.json') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIFFS_URL: ${{ steps.diffs.outputs.artifact-url }}
+          REPORT_URL: ${{ steps.report.outputs.artifact-url }}
+          VIDEOS_URL: ${{ steps.videos.outputs.artifact-url }}
+        run: |
+          node e2e/web/report.ts > screenshots.md
+          cat screenshots.md >> "$GITHUB_STEP_SUMMARY"
+          # On the pull request, one comment, kept up to date: posted when a screenshot changes, edited after.
+          # The run for the push to its branch leaves it to the pull request's run.
+          [ "${{ github.event_name }}" != push ] || exit 0
+          pr=$(gh pr view "${{ github.head_ref || github.ref_name }}" --json number,state --jq 'select(.state == "OPEN") | .number' 2>/dev/null || true)
+          [ -n "$pr" ] || exit 0
+          id=$(gh api "repos/${{ github.repository }}/issues/$pr/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- web-screenshots -->"))) | .id' | tail -1)
+          if [ -n "$id" ]; then gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -F body=@screenshots.md >/dev/null
+          elif [ -d screenshot-diffs ]; then gh pr comment "$pr" --body-file screenshots.md
+          fi

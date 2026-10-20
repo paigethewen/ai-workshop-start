@@ -1,0 +1,65 @@
+# A person accepts the web view's new look: the accept-screenshots label on a pull request takes the web tests'
+# screenshots again, on Linux in the tests' image as CI does, and commits them to its branch as the new
+# baselines, then runs CI on them. The only way a baseline changes: CI fails a commit of the branch that does.
+name: Screenshots
+on:
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: screenshots-${{ github.event.pull_request.number }}
+jobs:
+  accept:
+    # A fork's branch is not this repository's to push to.
+    if: github.event.label.name == 'accept-screenshots' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: echo "${{ github.token }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      # Every baseline again, so one no test takes any more goes; the tests themselves must still pass.
+      - name: Take the screenshots
+        run: |
+          rm -rf e2e/web/screenshots
+          npm run e2e -- --update-snapshots=all
+        env:
+          SKILL_ATLAS_WEB_PUSH: 1
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-videos
+          path: test-results/**/*.webm
+          retention-days: 30
+      - name: Commit them
+        env:
+          REVIEWER: ${{ github.event.sender.login }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all e2e/web/screenshots
+          if git diff --cached --quiet; then
+            body="The screenshots, taken again, are the baselines already: nothing to accept."
+          else
+            git commit --quiet -m "Accept the web view's screenshots, reviewed by @$REVIEWER" -m "From the accept-screenshots label on #$PR."
+            git push origin "HEAD:$BRANCH"
+            body="@$REVIEWER accepted the screenshots: $(git rev-parse --short HEAD) makes them the baselines. CI runs again on it."
+          fi
+          gh pr edit "$PR" --remove-label accept-screenshots
+          # A push with this workflow's token starts no workflow: CI is started by hand.
+          gh workflow run ci.yml --ref "$BRANCH" || echo "::warning::CI did not start: push to $BRANCH to run it on the new baselines"
+          gh pr comment "$PR" --body "$body"
