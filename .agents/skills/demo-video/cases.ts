@@ -12,6 +12,14 @@ export type Case = {
 // A pause is for the viewer, never to wait for the page: wait for what the page shows, then pause.
 const pause = (page: Page, ms = 2000) => page.waitForTimeout(ms);
 
+// Waits for what a scan shows; a scan that fails shows its error instead, and the case fails at once with it.
+async function shown(page: Page, selector: string, timeout = 60_000) {
+  await page.locator(`${selector}, #problem:not([hidden])`).first().waitFor({ timeout });
+  if (await page.locator('#problem').isVisible()) {
+    throw new Error(`the scan failed: ${await page.locator('#problem-message').textContent()}`);
+  }
+}
+
 async function scan(page: Page, base: string, repo: string) {
   await page.goto(base);
   await pause(page, 1500);
@@ -25,7 +33,7 @@ export const cases: Record<string, Case> = {
     github: false,
     async run(page, base) {
       await scan(page, base, './fixture');
-      await page.locator('#skills a').first().waitFor();
+      await shown(page, '#skills a');
       await pause(page);
       await page.locator('#skills a', { hasText: '×3' }).click();
       await page.locator('#skill').waitFor();
@@ -39,7 +47,7 @@ export const cases: Record<string, Case> = {
     github: true,
     async run(page, base) {
       await scan(page, base, 'https://github.com/JetBrains/kotlin');
-      await page.locator('#skills a').first().waitFor({ timeout: 60_000 });
+      await shown(page, '#skills a');
       await pause(page, 2500);
       await page.locator('#filter').pressSequentially('test', { delay: 250 });
       await pause(page, 2500);
@@ -55,18 +63,18 @@ export const cases: Record<string, Case> = {
     },
   },
   'scan-organization': {
-    about: 'Scan the anthropics organization, open one of its repositories, and go back to the organization',
+    about: 'Scan the modelcontextprotocol organization, open one of its repositories, and go back to the organization',
     github: true,
     async run(page, base) {
-      await scan(page, base, 'https://github.com/anthropics');
-      await page.locator('#repositories li').first().waitFor({ timeout: 180_000 });
+      await scan(page, base, 'https://github.com/modelcontextprotocol');
+      await shown(page, '#repositories li', 180_000);
       await pause(page, 3000);
       await page.mouse.wheel(0, 500);
       await pause(page);
       await page.mouse.wheel(0, -500);
       await pause(page, 1000);
       await page.locator('#repositories a').first().click();
-      await page.locator('#skills a').first().waitFor({ timeout: 60_000 });
+      await shown(page, '#skills a');
       await pause(page, 3000);
       await page.goBack();
       await page.locator('#organization').waitFor();

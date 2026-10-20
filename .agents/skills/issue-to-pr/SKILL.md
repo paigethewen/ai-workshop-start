@@ -60,7 +60,7 @@ Work on a branch, never on `main`. Commit in logical steps, each message stating
 Push and open the pull request against `main`:
 
 - Title: the change, in the imperative, under 70 characters
-- Body: `Closes #<number>`; the problem, in one sentence; the solution and why this layer; the decisions you made where the issue was open; the tests added; anything left out of scope; a `## Demo` section, from the [demo-video](../demo-video/SKILL.md) skill, when the web view changes
+- Body: `Closes #<number>`; the problem, in one sentence; the solution and why this layer; the decisions you made where the issue was open; the tests added; anything left out of scope; a `## Demo` section, from the [demo-video](../demo-video/SKILL.md) skill, when the change is a product-changing feature or fix
 - Link the pull request on the issue if `Closes` does not do it
 
 Wait for [CI](../../../.github/workflows/ci.yml) on the pull request. If it fails, read the log, fix the cause, push, and wait again until it is green.
