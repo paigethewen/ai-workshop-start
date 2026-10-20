@@ -29,7 +29,7 @@ directory, then pick a skill to read its `SKILL.md`, rendered or as it is; the f
 marks what it found. Enter an owner's URL to list its repositories with skills, and pick one to scan it. `--port <port>`
 picks another port.
 
-Set `GITHUB_TOKEN` for a higher GitHub rate limit: an organization of more than a few dozen repositories needs it. `npm test` runs the tests.
+Set `GITHUB_TOKEN` for a higher GitHub rate limit: an organization of more than a few dozen repositories needs it. `npm test` runs the tests; `npm run e2e`, the visual tests: the demo cases in a browser, a video of each in `demo-videos/`.
 
 - [spec/](spec/): what it does; [spec/web.md](spec/web.md): the web view. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.

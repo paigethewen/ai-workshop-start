@@ -1,0 +1,94 @@
+# /accept-screenshots, commented on a pull request by someone with write access: the pull request's new UI
+# becomes its baseline. Its head is rendered again in the visual job's container, the screenshots are kept as the
+# visual-baseline-pr-<N> artifact, and the pull request's failed CI jobs run again against them.
+# Only a human accepts: the agent that opened the pull request never comments this.
+name: Accept screenshots
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: accept-screenshots-${{ github.event.issue.number }}
+jobs:
+  authorize:
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/accept-screenshots') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: read
+      issues: write
+    outputs:
+      sha: ${{ steps.pr.outputs.sha }}
+    steps:
+      - id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          ACTOR: ${{ github.event.comment.user.login }}
+          COMMENT: ${{ github.event.comment.id }}
+        run: |
+          set -euo pipefail
+          permission=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)
+          case "$permission" in
+            admin|maintain|write) ;;
+            *) echo "@$ACTOR has $permission access: only write access accepts screenshots"; exit 1 ;;
+          esac
+          gh api -X POST "repos/$REPO/issues/comments/$COMMENT/reactions" -f content=eyes >/dev/null
+          echo "sha=$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
+  # The pull request's code runs here, with a read-only token: the same steps as CI's visual job, without a baseline.
+  render:
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.authorize.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v7
+        with:
+          name: visual-baseline-pr-${{ github.event.issue.number }}
+          path: screenshots/*.png
+          if-no-files-found: error
+          retention-days: 90
+  rerun:
+    needs: [authorize, render]
+    if: ${{ always() && needs.authorize.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+      pull-requests: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          SHA: ${{ needs.authorize.outputs.sha }}
+          ACTOR: ${{ github.event.comment.user.login }}
+          RENDERED: ${{ needs.render.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$RENDERED" != success ]; then
+            gh pr comment "$PR" --repo "$REPO" --body "Could not accept the screenshots of $SHA for @$ACTOR: [the render failed]($RUN_URL)."
+            exit 1
+          fi
+          run=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --event pull_request --limit 1 --json databaseId,status --jq '.[0] | "\(.databaseId) \(.status)"')
+          read -r id status <<< "$run"
+          if [ "$status" = completed ]; then
+            gh run rerun "$id" --repo "$REPO" --failed || true
+            next="CI's failed jobs run again against it."
+          else
+            next="CI is still running on it: its visual job may have started before this baseline, run it again once it is done."
+          fi
+          gh pr comment "$PR" --repo "$REPO" --body "@$ACTOR accepted the screenshots of $SHA as this pull request's baseline ([run]($RUN_URL)). $next Once merged, a green run on main makes them main's baseline."

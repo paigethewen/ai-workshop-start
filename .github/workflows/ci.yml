@@ -45,3 +45,146 @@ jobs:
       - run: npm run test:e2e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # The demo cases in e2e/visual/, as deterministic Playwright tests, in the same container as every baseline:
+  # the same Linux, browser and fonts. Every run records each case's video; each key moment's screenshot must
+  # match the baseline to the pixel, see e2e/visual/baseline.ts for which one. A green run on main uploads
+  # its screenshots as main's baseline.
+  visual:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: mcr.microsoft.com/playwright:v1.58.2-noble
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      # The pull request's head, not its merge with main: what /accept-screenshots renders.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - id: baseline
+        run: node e2e/visual/baseline.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+      - if: ${{ steps.baseline.outputs.artifact-id }}
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ steps.baseline.outputs.artifact-id }}
+          run-id: ${{ steps.baseline.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: visual-baseline
+          merge-multiple: true
+      # No baseline yet, the first run, or one expired: the screenshots are written, not compared, and become main's.
+      - run: npm run e2e
+        env:
+          VISUAL_BASELINE: ${{ steps.baseline.outputs.artifact-id && 'visual-baseline' || '' }}
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-videos
+          path: demo-videos/
+          if-no-files-found: error
+          retention-days: 90
+      - id: report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-report
+          path: |
+            playwright-report/
+            test-results/**/*.png
+          retention-days: 90
+      - if: ${{ github.event_name == 'push' && success() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-baseline
+          path: ${{ steps.baseline.outputs.artifact-id && 'visual-baseline' || 'screenshots' }}/*.png
+          if-no-files-found: error
+          retention-days: 90
+      - name: Summary
+        if: ${{ !cancelled() }}
+        env:
+          FROM: ${{ steps.baseline.outputs.from }}
+          REPORT: ${{ steps.report.outputs.artifact-url }}
+        run: |
+          {
+            echo "## Screenshots"
+            if [ "$FROM" = none ]; then echo "No baseline yet: the screenshots were written, not compared."; else echo "Compared with the baseline from \`$FROM\`."; fi
+            changed=$(find test-results -name '*-actual.png' 2>/dev/null | sort)
+            if [ -n "$changed" ]; then
+              echo "Changed or new, as expected, actual and diff in [visual-report]($REPORT) (open \`playwright-report/index.html\`):"
+              for file in $changed; do echo "- \`$(basename "$file" -actual.png)\`"; done
+              echo "If the new UI is intended, a maintainer comments \`/accept-screenshots\` on the pull request."
+            fi
+            echo "Every case's video: the \`demo-videos\` artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+  # Changed screenshots, before, after and diff, in one comment on the pull request, for a human to review.
+  # The images go to the visual-diffs branch, which holds nothing else, so the comment can show them.
+  # No pull request code runs here: only the images from the visual job's artifact.
+  visual-diff-comment:
+    needs: visual
+    if: ${{ always() && needs.visual.result == 'failure' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: visual-report
+          path: report
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RUN: ${{ github.run_id }}-${{ github.run_attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          changed=$(find report/test-results -name '*-actual.png' 2>/dev/null | sort)
+          [ -n "$changed" ] || { echo "The visual job failed before any screenshot differed: see its log"; exit 0; }
+          dir="pr-$PR/$RUN"
+          raw="https://raw.githubusercontent.com/$REPO/visual-diffs/$dir"
+          git init -q diffs
+          cd diffs
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git remote add origin "https://x-access-token:$GH_TOKEN@github.com/$REPO.git"
+          if git fetch -q --depth 1 origin visual-diffs; then git checkout -q -b visual-diffs FETCH_HEAD; else git checkout -q --orphan visual-diffs; fi
+          mkdir -p "$dir"
+          rows=""
+          for actual in $changed; do
+            name=$(basename "$actual" -actual.png)
+            from=$(dirname "$actual")
+            cp "../$actual" "$dir/$name-actual.png"
+            if [ -f "../$from/$name-expected.png" ]; then
+              cp "../$from/$name-expected.png" "$dir/$name-expected.png"
+              cp "../$from/$name-diff.png" "$dir/$name-diff.png"
+              rows+="| \`$name\` | <img src=\"$raw/$name-expected.png\" width=\"300\"> | <img src=\"$raw/$name-actual.png\" width=\"300\"> | <img src=\"$raw/$name-diff.png\" width=\"300\"> |"$'\n'
+            else
+              rows+="| \`$name\` | *none: a new screenshot* | <img src=\"$raw/$name-actual.png\" width=\"300\"> | |"$'\n'
+            fi
+          done
+          git add "$dir"
+          git commit -q -m "Screenshots changed by #$PR at $SHA"
+          for attempt in 1 2 3; do git push -q origin visual-diffs && break; git pull -q --rebase origin visual-diffs; done
+          marker='<!-- visual-diff -->'
+          body="$marker
+          ## Screenshots changed
+          At $SHA, [this run]($RUN_URL) shows a different UI than the baseline: before, after, and the changed pixels in red.
+
+          | Screenshot | Before (baseline) | After (this pull request) | Diff |
+          |---|---|---|---|
+          $rows
+          If the new UI is intended, a maintainer comments \`/accept-screenshots\`: it becomes this pull request's baseline and CI runs again. The HTML report, with a slider over each image, is in the run's \`visual-report\` artifact."
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | tail -1)
+          if [ -n "$id" ]; then gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null; else gh pr comment "$PR" --repo "$REPO" --body "$body"; fi

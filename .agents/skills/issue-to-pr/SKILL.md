@@ -49,6 +49,7 @@ Run, from a fresh install, everything CI runs:
 - `npm run typecheck`
 - `npm test`
 - `npm run test:e2e` when `GITHUB_TOKEN` is set
+- `npm run e2e`, and look at the screenshots in `screenshots/`
 - the CI smoke test: `./skill-atlas help`, `./skill-atlas scan ./fixture`, and `./skill-atlas serve` answering on its port
 
 Every failure is yours to fix, including one the change exposed in existing tests. Never skip, weaken or delete a test to make it pass.
@@ -64,5 +65,6 @@ Push and open the pull request against `main`:
 - Link the pull request on the issue if `Closes` does not do it
 
 Wait for [CI](../../../.github/workflows/ci.yml) on the pull request. If it fails, read the log, fix the cause, push, and wait again until it is green.
-The work is done when the pull request is open and CI is green; do not merge it: a human reviews and merges.
+A visual job that fails with CI's `Screenshots changed` comment is the exception when the change means to alter the UI: check every before, after and diff in the comment; fix any change the issue did not ask for; list the intended ones in a `## Screenshots` section of the body, one line each on what changed and why; then leave it to a human, who accepts with `/accept-screenshots`. Never accept them yourself; see the [demo-video](../demo-video/SKILL.md) skill.
+The work is done when the pull request is open and CI is green, or red only on the visual job awaiting that acceptance; do not merge it: a human reviews and merges.
 Opening it starts the code-review automation, whose review starts the [address-comment](../address-comment/SKILL.md) automation: do not watch for review yourself.

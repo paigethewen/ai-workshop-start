@@ -1,0 +1,40 @@
+# Artifacts expire after 90 days, and main's baseline is one: each week, it is uploaded again as it is, so a
+# quiet repository keeps it. Nothing is rendered: a baseline changes only through a green run on main.
+name: Visual baseline keep-alive
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - id: baseline
+        run: node e2e/visual/baseline.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.baseline.outputs.from != 'main' }}
+        run: |
+          echo "No baseline on main to keep: the next green run on main uploads one"
+          exit 1
+      - uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ steps.baseline.outputs.artifact-id }}
+          run-id: ${{ steps.baseline.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: visual-baseline
+          merge-multiple: true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: visual-baseline
+          path: visual-baseline/*.png
+          if-no-files-found: error
+          retention-days: 90
