@@ -21,8 +21,8 @@ async function scan(page: Page, repo: string) {
   await page.click('#scan-button');
 }
 
-/** A key moment, compared with the baseline's `<case>-<moment>.png`. */
-const moment = (page: Page, name: string) => expect(page).toHaveScreenshot(`${test.info().title}-${name}.png`);
+/** A key moment, compared with the baseline's `<case>-<moment>.png`; soft: the case goes on, so every changed moment is reported. */
+const moment = (page: Page, name: string) => expect.soft(page).toHaveScreenshot(`${test.info().title}-${name}.png`);
 
 test.beforeEach(async ({ context, baseURL }) => {
   // Only the web view answers: an image a SKILL.md links to on the web would differ from run to run.
