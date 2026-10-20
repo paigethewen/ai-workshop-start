@@ -52,5 +52,5 @@ GitHub plays a video inline only when a person drags it into the description; th
 Artifacts expire after 90 days; to watch a demo later, run the workflow again on the branch or on `main` from the Actions tab.
 When the feature changes after review, the new push records again: link the new run in the reply.
 
-A case that hits GitHub's rate limit is recorded again after a minute, up to 3 times; any other failure fails the run at once, with the page's error in the log and the page as `<case>-failed.png` in the artifact.
+A case that hits GitHub's short rate limit ("try again in a minute") is recorded once more after a minute; any other failure fails the run at once, with the page's error in the log and the page as `<case>-failed.png` in the artifact.
 If the Demo run fails, read its log and fix the cause; never link a run whose recording failed.
