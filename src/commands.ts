@@ -10,11 +10,17 @@ export type Context = {
   print(text: string): void;
   /** Errors and warnings. */
   error(text: string): void;
+  /** Starts the web view on the port and returns its URL; only the Node CLI can. */
+  serve?(port: number): Promise<string>;
 };
+
+/** The web view's port when `--port` is not given. */
+export const DEFAULT_PORT = 4173;
 
 const usage = `Usage: skill-atlas <command>
 
   scan <GitHub URL | directory>   find every unique skill in a repository and print it
+  serve [--port <port>]           open the web view on http://127.0.0.1:${DEFAULT_PORT}/
   help                            show this help`;
 
 /** Runs one command; returns its exit code. */
@@ -22,6 +28,7 @@ export async function run(args: string[], context: Context): Promise<number> {
   const [command = 'help', ...rest] = args;
   try {
     if (command === 'scan') await scanCommand(rest, context);
+    else if (command === 'serve') await serveCommand(rest, context);
     else if (command === 'help') context.print(usage);
     else throw new AtlasError(`Unknown command: ${command}\n\n${usage}`);
     return 0;
@@ -37,6 +44,15 @@ async function scanCommand(args: string[], context: Context) {
   const result = await scan(await context.open(args[0]));
   printRepository(result.repository, result.skills, context);
   for (const warning of result.warnings) context.error(`warning: ${warning}`);
+}
+
+async function serveCommand(args: string[], context: Context) {
+  const [flag, value, ...extra] = args;
+  const port = flag === undefined ? DEFAULT_PORT : flag === '--port' && /^\d+$/.test(value ?? '') && !extra.length ? Number(value) : NaN;
+  if (!(port >= 0 && port <= 65535)) throw new AtlasError('Usage: skill-atlas serve [--port <port>]');
+  if (!context.serve) throw new AtlasError('The web view runs from the command line: ./skill-atlas serve');
+  context.print(`Skill Atlas web view: ${await context.serve(port)}`);
+  context.print('Press Ctrl+C to stop.');
 }
 
 /** `<owner>/<repo> · N skills`, then each skill's name, first sentence and link. */

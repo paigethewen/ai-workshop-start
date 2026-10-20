@@ -22,11 +22,15 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      # The real CLI on the fixture repository, as a user would run it: it must exit 0.
+      # The real CLI on the fixture repository, as a user would run it: it must exit 0; the web view must answer.
       - name: Smoke test
         run: |
           ./skill-atlas help
           ./skill-atlas scan ./fixture
+          ./skill-atlas serve --port 4173 & server=$!
+          for i in $(seq 20); do curl -sf http://127.0.0.1:4173/ >/dev/null && break; sleep 0.5; done
+          curl -sf 'http://127.0.0.1:4173/api/scan?repo=./fixture' | grep -q '"id":"fixture"'
+          kill $server
   # The real CLI against real JetBrains repositories on live GitHub, pinned to commits.
   e2e:
     runs-on: ubuntu-latest

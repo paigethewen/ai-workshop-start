@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill Atlas</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236b57ff'/%3E%3Cpath d='M16 7l7 4v10l-7 4-7-4V11z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Skill Atlas home">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M16 7l7 4v10l-7 4-7-4V11z"/></svg>
+      <span>Skill Atlas</span>
+    </a>
+    <form id="scan" class="search">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="repo" name="repo" type="text" required autocomplete="off" spellcheck="false"
+             placeholder="https://github.com/owner/repo, or a local directory" aria-label="Repository">
+      <button type="submit" id="scan-button"><span class="spinner" aria-hidden="true"></span><span>Scan</span></button>
+    </form>
+  </header>
+
+  <section id="welcome" class="welcome">
+    <div class="hero">
+      <svg class="hero-logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M16 7l7 4v10l-7 4-7-4V11z"/></svg>
+      <h1>Every skill an agent reads from a repository</h1>
+      <p>Paste a GitHub URL or a local directory. Skill Atlas finds each <code>SKILL.md</code> in the agents' folders, counts copies once, and lets you read every one.</p>
+      <div class="examples">
+        <span>Try</span>
+        <button type="button" class="chip" data-repo="https://github.com/JetBrains/kotlin">JetBrains/kotlin</button>
+        <button type="button" class="chip" data-repo="https://github.com/JetBrains/koog">JetBrains/koog</button>
+        <button type="button" class="chip" data-repo="./fixture">./fixture</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="problem" class="problem" hidden>
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>
+    <div><h2>Couldn't scan this repository</h2><p id="problem-message"></p></div>
+  </section>
+
+  <main id="results" class="layout" hidden>
+    <aside class="sidebar" aria-label="Skills">
+      <div class="sidebar-head">
+        <p class="eyebrow" id="repository"></p>
+        <h2 id="summary"></h2>
+        <label class="filter">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          <input id="filter" type="search" placeholder="Filter skills" aria-label="Filter skills">
+        </label>
+      </div>
+      <details id="warnings" class="warnings" hidden><summary></summary><ul></ul></details>
+      <ul id="skills" class="skill-list"></ul>
+      <p id="no-match" class="empty" hidden>No skill matches the filter.</p>
+    </aside>
+
+    <article id="skill" class="reader" hidden>
+      <header class="reader-head">
+        <div class="badges" id="skill-badges"></div>
+        <h2 id="skill-name"></h2>
+        <p id="skill-description" class="lead"></p>
+        <div class="meta">
+          <a id="skill-link" class="path" target="_blank" rel="noreferrer noopener">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+            <span id="skill-path"></span>
+          </a>
+          <span id="skill-commit" class="commit"></span>
+        </div>
+        <p id="skill-copies" class="copies"></p>
+        <dl id="skill-properties" class="properties"></dl>
+      </header>
+      <div class="toolbar">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-view="rendered" aria-selected="true">Rendered</button>
+          <button type="button" role="tab" data-view="source" aria-selected="false">SKILL.md</button>
+        </div>
+        <button type="button" id="copy" class="ghost">Copy SKILL.md</button>
+      </div>
+      <div id="skill-rendered" class="markdown"></div>
+      <pre id="skill-source" class="source" hidden></pre>
+    </article>
+    <div id="no-skills" class="reader empty-reader" hidden>
+      <h2>No skills here</h2>
+      <p>No <code>SKILL.md</code> in an agent folder such as <code>.claude/skills/&lt;name&gt;/</code> or <code>.agents/skills/&lt;name&gt;/</code>.</p>
+    </div>
+  </main>
+</body>
+</html>
