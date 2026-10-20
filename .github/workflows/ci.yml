@@ -117,7 +117,8 @@ jobs:
           {
             echo "## Screenshots"
             if [ "$FROM" = none ]; then echo "No baseline yet: the screenshots were written, not compared."; else echo "Compared with the baseline from \`$FROM\`."; fi
-            changed=$(find test-results -name '*-actual.png' 2>/dev/null | sort)
+            # Without a baseline, Playwright writes every screenshot as an "actual": none of them changed.
+            changed=$([ "$FROM" = none ] || find test-results -name '*-actual.png' 2>/dev/null | sort)
             if [ -n "$changed" ]; then
               echo "Changed or new, as expected, actual and diff in [visual-report]($REPORT) (open \`playwright-report/index.html\`):"
               for file in $changed; do echo "- \`$(basename "$file" -actual.png)\`"; done

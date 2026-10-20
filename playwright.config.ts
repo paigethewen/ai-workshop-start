@@ -4,7 +4,7 @@
 // the pixel. Without it, nothing is compared: the screenshots are written to screenshots/, a new baseline.
 import { defineConfig } from '@playwright/test';
 
-const baseline = process.env.VISUAL_BASELINE;
+const baseline = process.env.VISUAL_BASELINE || undefined; // CI passes '' for none
 const port = 4183;
 const size = { width: 1280, height: 800 };
 
