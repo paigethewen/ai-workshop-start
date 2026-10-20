@@ -1,7 +1,7 @@
 // Runs the commands the way the CLI does, with GitHub answering from EXAMPLE below.
 import { fileURLToPath } from 'node:url';
-import { run } from '../src/commands.ts';
-import { openGitHub, parseGitHubUrl } from '../src/core/github.ts';
+import { run, type Context } from '../src/commands.ts';
+import { openGitHub, openGitHubOrganization, parseGitHubOwner, parseGitHubUrl } from '../src/core/github.ts';
 import { replay, type Recording } from '../src/core/replay.ts';
 import { openDirectory } from '../src/local.ts';
 
@@ -30,12 +30,18 @@ const github = replay(EXAMPLE);
 /** What the CLI opens; with a token, through code search, as EXAMPLE answers it. */
 export const open = (input: string) => (parseGitHubUrl(input) ? openGitHub(input, { fetch: github, token: 'test' }) : openDirectory(input));
 
-/** `skill-atlas <args>`, as the CLI runs it, with GitHub answering from EXAMPLE. */
-export async function atlas(args: string[]) {
+/** What the CLI opens for an owner URL without a repository. */
+export const openOrganization = (input: string) =>
+  parseGitHubOwner(input) ? openGitHubOrganization(input, { fetch: github, token: 'test' }) : undefined;
+
+/** `skill-atlas <args>`, as the CLI runs it, with GitHub answering from EXAMPLE unless `context` says otherwise. */
+export async function atlas(args: string[], context: Partial<Context> = {}) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = await run(args, {
     open,
+    openOrganization,
+    ...context,
     print: (text) => stdout.push(text),
     error: (text) => stderr.push(text),
   });

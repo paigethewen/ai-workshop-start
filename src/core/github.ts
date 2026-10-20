@@ -1,5 +1,6 @@
-import { AtlasError } from './errors.ts';
+import { AtlasError, GitHubUnavailable } from './errors.ts';
 import { SKILL_ROOTS } from './find.ts';
+import type { Organization } from './organization.ts';
 import type { Source } from './scan.ts';
 
 /** The part of `fetch` the core uses, so tests and the browser can pass their own. */
@@ -23,6 +24,11 @@ export function parseGitHubUrl(input: string): { owner: string; repo: string; re
   return match ? { owner: match[1], repo: match[2], ref: match[3] } : undefined;
 }
 
+/** `https://github.com/owner`, without a repository: an organization or a user. */
+export function parseGitHubOwner(input: string): string | undefined {
+  return /^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w.-]+)\/?$/i.exec(input.trim())?.[1];
+}
+
 /** Resolves the pinned ref, else the default branch, to a commit and lists the files that may be skills. */
 export async function openGitHub(input: string, options: GitHubOptions): Promise<Source> {
   const name = parseGitHubUrl(input);
@@ -32,15 +38,52 @@ export async function openGitHub(input: string, options: GitHubOptions): Promise
     `${API}/repos/${name.owner}/${name.repo}`,
     `Repository not found: https://github.com/${name.owner}/${name.repo}`,
   );
-  const id = info.full_name;
-  const ref = name.ref ?? info.default_branch;
+  // Code search sees only the default branch: a pinned commit is listed from its tree.
+  const hint = name.ref ? 'a pinned commit cannot be searched' : options.token ? undefined : 'GITHUB_TOKEN searches everywhere';
+  return openCommit(github, info.full_name, name.ref ?? info.default_branch, hint);
+}
+
+/**
+ * The owner's own repositories, forks aside: a fork's skills are its upstream's. Each one is listed
+ * from its tree, even with a token: code search allows too few requests a minute for many repositories.
+ */
+export async function openGitHubOrganization(input: string, options: GitHubOptions): Promise<Organization> {
+  const owner = parseGitHubOwner(input);
+  if (!owner) throw new AtlasError(`Not a GitHub organization URL: ${input}`);
+  const github = client(options);
+  const { login } = await github.json<{ login: string }>(
+    `${API}/users/${owner}`,
+    `Organization or user not found: https://github.com/${owner}`,
+  );
+  const listed: { full_name: string; default_branch: string; fork: boolean }[] = [];
+  for (let page = 1; ; page++) {
+    const repositories = await github.json<typeof listed>(`${API}/users/${login}/repos?per_page=100&page=${page}`);
+    listed.push(...repositories);
+    if (repositories.length < 100) break;
+  }
+  return {
+    id: login,
+    repositories: listed
+      .filter((repository) => !repository.fork)
+      .map(({ full_name: id, default_branch: branch }) => ({
+        id,
+        // A client of its own: the answers it keeps go with the repository once it is scanned.
+        open: () => openCommit(client(options), id, branch, 'scan this repository alone, with GITHUB_TOKEN, to search everywhere'),
+      })),
+  };
+}
+
+/**
+ * The ref's commit and the files that may be skills: through code search without a `hint`; else from
+ * the tree, and a truncated tree's warning ends with the hint.
+ */
+async function openCommit(github: Client, id: string, ref: string, hint?: string): Promise<Source> {
   const { sha } = await github.json<{ sha: string }>(
     `${API}/repos/${id}/commits/${encodeURIComponent(ref)}`,
     `Not found in https://github.com/${id}: ${ref}`,
   );
   const warnings: string[] = [];
-  // Code search sees only the default branch: a pinned commit is listed from its tree.
-  const paths = options.token && !name.ref ? await searchPaths(github, id) : await treePaths(github, id, sha, warnings, !!name.ref);
+  const paths = hint === undefined ? await searchPaths(github, id) : await treePaths(github, id, sha, warnings, hint);
   const [organization, repo] = id.split('/');
   return {
     repository: { id, organization, name: repo, url: `https://github.com/${id}`, commit: sha },
@@ -67,10 +110,9 @@ async function searchPaths(github: Client, id: string): Promise<string[]> {
 type Tree = { truncated: boolean; tree: { path: string; mode: string; type: string; sha: string }[] };
 
 /** The whole tree at once, or only the skill roots when it is too large for one answer. */
-async function treePaths(github: Client, id: string, sha: string, warnings: string[], pinned: boolean): Promise<string[]> {
+async function treePaths(github: Client, id: string, sha: string, warnings: string[], hint: string): Promise<string[]> {
   const tree = await github.json<Tree>(`${API}/repos/${id}/git/trees/${sha}?recursive=1`);
   if (!tree.truncated) return files(tree);
-  const hint = pinned ? 'a pinned commit cannot be searched' : 'GITHUB_TOKEN searches everywhere';
   warnings.push(
     `the tree is too large to list at once; looked only in ${SKILL_ROOTS.join(', ')} at the root, so nested ones were skipped (${hint})`,
   );
@@ -112,7 +154,7 @@ function client({ fetch, token }: GitHubOptions) {
     try {
       return await fetch(url, init);
     } catch (error) {
-      throw new AtlasError(`Cannot reach GitHub: ${describe(error)}`);
+      throw new GitHubUnavailable(`Cannot reach GitHub: ${describe(error)}`);
     }
   }
 
@@ -132,10 +174,10 @@ function client({ fetch, token }: GitHubOptions) {
           continue;
         }
         if (wait !== undefined || /rate limit/i.test(text)) {
-          throw new AtlasError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
+          throw new GitHubUnavailable(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
         }
       }
-      if (response.status === 401) throw new AtlasError('GitHub rejected the token in GITHUB_TOKEN');
+      if (response.status === 401) throw new GitHubUnavailable('GitHub rejected the token in GITHUB_TOKEN');
       throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
     }
   }
