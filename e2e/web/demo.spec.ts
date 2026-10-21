@@ -82,16 +82,19 @@ test('filter-skills: scan JetBrains/kotlin and filter its skills by "test": the 
   await pause(page, 3000);
 });
 
-test('scan-organization: scan the modelcontextprotocol organization, open one of its repositories, and go back to the organization', async ({ page }) => {
+test('scan-organization: scan the modelcontextprotocol organization, count its repositories as they are scanned, open one of them, and go back to the organization', async ({ page }) => {
   await scan(page, ORGANIZATION);
-  await shown(page, '#repositories li');
+  // While it scans: how many repositories are done, and those with skills so far, not yet links.
+  await expect(page.locator('#organization-summary')).toHaveText(/^[1-9]\d* of \d+ repositories scanned$/);
+  await expect(page.locator('#repositories a:not([href])').first()).toBeVisible();
+  await shown(page, '#repositories a[href]');
   await moment(page, 'scan-organization-1-repositories');
   await pause(page, 3000);
   await page.mouse.wheel(0, 500);
   await pause(page);
   await page.mouse.wheel(0, -500);
   await pause(page, 1000);
-  await page.locator('#repositories a').first().click();
+  await page.locator('#repositories a[href]').first().click();
   await shown(page, '#skills a');
   await moment(page, 'scan-organization-2-repository');
   await pause(page, 3000);
@@ -100,7 +103,6 @@ test('scan-organization: scan the modelcontextprotocol organization, open one of
   await moment(page, 'scan-organization-3-back');
   await pause(page, 3000);
 });
-
 test('reload-skill: scan ./fixture, open test-runner, and reload: the same skill is open, its #<path> kept', async ({ page }) => {
   await scan(page, './fixture');
   await shown(page, '#skills a');

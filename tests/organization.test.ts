@@ -2,6 +2,7 @@
 // organizations answered below and in tests/helpers.ts: `scan https://github.com/<owner>` without a repository.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { run } from '../src/commands.ts';
 import { openGitHubOrganization, type Fetch } from '../src/core/github.ts';
 import { replay } from '../src/core/replay.ts';
 import { ACME, API, atlas, listed, RAW, repository, skill } from './helpers.ts';
@@ -123,6 +124,71 @@ test('GitHub out of reach stops the whole organization scan, exit code 1', async
   const scanned = await scanOrganization('https://github.com/acme', replay(unanswered));
   assert.equal(scanned.code, 1);
   assert.equal(scanned.stderr, 'Cannot reach GitHub: not recorded: https://api.github.com/repos/Acme/docs/commits/main');
+});
+
+test('an organization scan scans 8 repositories at a time', async () => {
+  const ids = Array.from({ length: 12 }, (_, index) => `Acme/repo-${index}`);
+  const recorded = replay({
+    [`${API}/users/Acme`]: { status: 200, body: { login: 'Acme' } },
+    [`${API}/users/Acme/repos?per_page=100&page=1`]: { status: 200, body: ids.map((id) => listed(id)) },
+    ...Object.assign({}, ...ids.map((id) => repository(id, 'e'.repeat(40), {}))),
+  });
+  let scanning = 0;
+  let most = 0;
+  const slow: Fetch = async (url, init) => {
+    const commit = url.includes('/commits/');
+    if (commit) most = Math.max(most, ++scanning);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    if (url.includes('/git/trees/')) scanning--;
+    return recorded(url, init);
+  };
+  const scanned = await scanOrganization('https://github.com/Acme', slow);
+  assert.equal(scanned.code, 0, scanned.stderr);
+  assert.equal(scanned.stdout, 'Acme · 0 of 12 repositories with skills');
+  assert.equal(most, 8);
+});
+
+/** `skill-atlas scan <url>` on a terminal: what it printed, its progress lines among them, in order. */
+async function onTerminal(url: string, fetch: Fetch) {
+  const shown: string[] = [];
+  const code = await run(['scan', url], {
+    open: () => Promise.reject(new Error('not a repository')),
+    openOrganization: (input) => openGitHubOrganization(input, { fetch, token: 'test' }),
+    print: (text) => shown.push(`stdout: ${text}`),
+    error: (text) => shown.push(`stderr: ${text}`),
+    progress: (text) => shown.push(`progress: ${text}`),
+  });
+  return { code, shown };
+}
+
+test('on a terminal, an organization scan counts the repositories scanned, and clears the count before the result', async () => {
+  const { code, shown } = await onTerminal('https://github.com/acme', replay(ACME));
+  assert.equal(code, 0);
+  assert.deepEqual(shown, [
+    'progress: Scanning Acme: 0 of 4 repositories',
+    'progress: Scanning Acme: 1 of 4 repositories',
+    'progress: Scanning Acme: 2 of 4 repositories',
+    'progress: Scanning Acme: 3 of 4 repositories',
+    'progress: Scanning Acme: 4 of 4 repositories',
+    'progress: ',
+    'stdout: Acme · 2 of 4 repositories with skills',
+    'stdout: Acme/app · 2 skills',
+    'stdout: Acme/tools · 1 skill',
+    'stderr: warning: Acme/empty: GitHub answered 409 for https://api.github.com/repos/Acme/empty/commits/main: Git Repository is empty.',
+  ]);
+});
+
+test('a stopped organization scan clears its count before the message, and counts nothing after it', async () => {
+  const limited = replay({
+    ...ACME,
+    [`${API}/repos/Acme/tools/commits/main`]: { status: 403, body: { message: 'API rate limit exceeded for 192.0.2.1.' } },
+  });
+  const { code, shown } = await onTerminal('https://github.com/acme', limited);
+  // The repositories still being scanned when it stopped finish after it, and are not counted.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(code, 1);
+  assert.deepEqual(shown.slice(-2), ['progress: ', 'stderr: GitHub rate limit reached; try again in a minute']);
+  assert.ok(!shown.some((line) => line.startsWith('stdout:')), shown.join('\n'));
 });
 
 test('a repository URL is still one repository, not an organization', async () => {

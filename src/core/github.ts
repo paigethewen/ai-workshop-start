@@ -165,7 +165,10 @@ function client({ fetch, token }: GitHubOptions) {
       const body: unknown = await response.json().catch(() => undefined);
       const message = (body as { message?: unknown } | undefined)?.message;
       const text = typeof message === 'string' ? message : '';
-      if (response.status === 404) throw new AtlasError(notFound);
+      // GitHub answers an unknown ref with 422, not 404.
+      if (response.status === 404 || (response.status === 422 && text.startsWith('No commit found'))) {
+        throw new AtlasError(notFound);
+      }
       if (response.status === 403 || response.status === 429) {
         // A short secondary limit, as code search gives shared runners, passes in seconds.
         const wait = retryAfter(response, text);
@@ -183,7 +186,7 @@ function client({ fetch, token }: GitHubOptions) {
   }
 
   return {
-    /** A GitHub API answer; `notFound` explains a 404. */
+    /** A GitHub API answer; `notFound` explains a 404, or a 422 for an unknown ref. */
     json<T>(url: string, notFound = `Not found on GitHub: ${url}`): Promise<T> {
       if (!answers.has(url)) answers.set(url, request(url, notFound));
       return answers.get(url) as Promise<T>;
