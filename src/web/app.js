@@ -132,7 +132,9 @@ function render() {
   folded($('warnings'), warnings);
   $('no-skills').hidden = skills.length > 0;
   screen('results');
-  show(location.hash.slice(1));
+  // A new scan starts from its first skill.
+  history.replaceState(null, '', location.search);
+  show('');
 }
 
 /** The warnings, folded under their count; hidden when there are none. */
@@ -237,7 +239,9 @@ function view(name) {
 
 async function copySource() {
   try {
-    await navigator.clipboard.writeText($('skill-source').textContent);
+    // What the reader shows: the rendered body, or the SKILL.md one tab over.
+    const shown = $('skill-source').hidden ? $('skill-rendered') : $('skill-source');
+    await navigator.clipboard.writeText(shown.textContent);
     $('copy').textContent = 'Copied';
   } catch {
     $('copy').textContent = 'Copy failed';
