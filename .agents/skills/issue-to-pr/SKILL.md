@@ -50,6 +50,7 @@ Run, from a fresh install, everything CI runs:
 - `npm test`
 - `npm run test:e2e` when `GITHUB_TOKEN` is set
 - the CI smoke test: `./skill-atlas help`, `./skill-atlas scan ./fixture`, and `./skill-atlas serve` answering on its port
+- `npm run e2e`, the web tests, when Docker is here; a screenshot the change means to change fails it, see below
 
 Every failure is yours to fix, including one the change exposed in existing tests. Never skip, weaken or delete a test to make it pass.
 Then review your own diff as a reviewer would, with the [code-review](../code-review/SKILL.md) criteria, and fix every finding.
@@ -64,5 +65,6 @@ Push and open the pull request against `main`:
 - Link the pull request on the issue if `Closes` does not do it
 
 Wait for [CI](../../../.github/workflows/ci.yml) on the pull request. If it fails, read the log, fix the cause, push, and wait again until it is green.
-The work is done when the pull request is open and CI is green; do not merge it: a human reviews and merges.
+The one failure that is not yours to fix: the `web` job's screenshots, when the change means to change what the web view shows. CI comments their before, after and diff on the pull request; check them as the [demo-video](../demo-video/SKILL.md) skill says, list them in the body with why each changes, and leave them to the reviewer, who accepts them with the `accept-screenshots` label. Never add it, and never commit a baseline.
+The work is done when the pull request is open and CI is green but for those screenshots; do not merge it: a human reviews and merges.
 Opening it starts the code-review automation, whose review starts the [address-comment](../address-comment/SKILL.md) automation: do not watch for review yourself.
