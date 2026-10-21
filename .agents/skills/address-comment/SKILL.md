@@ -68,7 +68,7 @@ Decide each item:
 - no action needed (approval, thanks, a review body that only points to its inline comments): no reply of its own, marker only
 
 Address all items in one pass. Never merge the pull request, rebase or force-push.
-If the pull request conflicts with `main`, first follow [resolve-conflicts](../resolve-conflicts/SKILL.md) steps 3 to 8 under the claim you hold, so the feedback lands on an up-to-date branch; if it hands the conflict to a human, address the feedback anyway.
+If the pull request conflicts with `main`, first follow [resolve-conflicts](../resolve-conflicts/SKILL.md) steps 3 to 8 under the claim you hold, so the feedback lands on an up-to-date branch; if it stops at step 3 or hands the conflict to a human, address the feedback anyway.
 
 ## 5. Verify
 

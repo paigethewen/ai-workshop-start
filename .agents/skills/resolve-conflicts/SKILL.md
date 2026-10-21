@@ -34,18 +34,23 @@ When address-comment sent you here, it holds the claim already: skip this step a
 Every comment this skill posts ends with a hidden marker naming the `main` it merged or gave up on, `<!-- resolve-conflicts: <main-sha> -->`.
 Read `main`'s sha with `git rev-parse origin/main` after `git fetch origin`.
 Stop, and release the claim, when the pull request no longer conflicts (another run resolved it while you waited), or when a trusted comment (as [address-comment](../address-comment/SKILL.md) step 3 defines trusted) already carries the marker for this sha: that `main` was tried already.
+When address-comment sent you here, every "stop" in steps 3 and 6 means return to it: it goes on with the review feedback either way.
 
 ## 4. Merge main
 
 Check out the branch with `gh pr checkout <number>`, and read the pull request description and its issue: they say what the branch means to do.
 Read [AGENTS.md](../../../AGENTS.md) and the [spec](../../../spec/).
 
+Air checks the repository out shallow, often with the branch head as its only commit, and neither `git fetch origin` nor `gh pr checkout` deepens it; complete the history first, or the merge finds no common ancestor:
+
 ```bash
+if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --unshallow origin; fi
 git merge --no-ff --no-commit origin/main
 git diff --name-only --diff-filter=U
 ```
 
 Merge, never rebase: a merge needs no force-push and keeps review threads on their commits.
+`refusing to merge unrelated histories` means the history is still shallow: deepen it, never `--allow-unrelated-histories`, which turns every file into an add/add conflict.
 For each conflicted file, read what `main` changed in it and why, before touching it:
 
 ```bash
