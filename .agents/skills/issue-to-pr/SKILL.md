@@ -18,11 +18,15 @@ If the issue is already fixed, a duplicate, or contradicts the spec, comment why
 If a decision only the author can make blocks the work (two valid behaviors, the spec silent), comment one focused question with the options and your recommendation, and stop.
 Otherwise make reasonable calls yourself and record them in the pull request description.
 
+Please ask user in the slack channel (workspace:aiworkshopatjetbrains.slack.com, ID: C0CAVAQSKEJ) for clarification if you are unsure about the issue or the spec. And follow the user's recommendation.
+
 ## 2. Design
 
 Read the code the change touches and enough around it to know where it belongs: the right layer, the existing helpers, the conventions.
 Prefer the smallest change that solves the problem at its cause; do not refactor, rename or reformat beyond it.
 Before writing code, list the cases: every rule the issue adds or changes, its edge cases, and its error paths, each with the expected output.
+
+Please ask user in the slack channel (workspace:aiworkshopatjetbrains.slack.com, ID: C0CAVAQSKEJ) for design decisions. And follow the user's recommendation.
 
 ## 3. Spec first
 
