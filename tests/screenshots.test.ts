@@ -60,13 +60,44 @@ test('a passing test, and a video, list nothing', () => {
 
 test('the comment lists every changed screenshot, links the artifacts, and leaves the acceptance to a person, by label', () => {
   const text = comment(changed(REPORT), { diffs: 'https://diffs', report: 'https://report', videos: 'https://videos' });
-  assert.ok(text.startsWith(`${MARKER}\n## Screenshots changed\n2 screenshots of the web tests differ from their baselines:`));
+  assert.ok(text.startsWith(`${MARKER}\n## Screenshots changed\nA screenshot of the web tests differs from its baseline:`));
   assert.match(text, /^\| `filter-skills-2-filtered` \| `filter-skills` \| 1,234 pixels \|$/m);
-  assert.match(text, /^\| `filter-skills-6-new` \| `filter-skills` \| new: no baseline yet \|$/m);
   assert.match(text, /\[screenshot-diffs\]\(https:\/\/diffs\)/);
   assert.match(text, /\[web-report\]\(https:\/\/report\)/);
   assert.match(text, /\[web-videos\]\(https:\/\/videos\)/);
   assert.match(text, /\*\*A person reviews them\.\*\* If the new UI is intended, add the label `accept-screenshots`/);
+});
+
+test('a screenshot without a baseline is listed apart, as new, not as changed', () => {
+  const text = comment(changed(REPORT), {});
+  assert.match(text, /^A new screenshot has no baseline yet:\n\n\| Screenshot \| Test \|\n\| --- \| --- \|\n\| `filter-skills-6-new` \| `filter-skills` \|$/m);
+  assert.doesNotMatch(text, /^\| `filter-skills-6-new` \| `filter-skills` \| .+ \|$/m);
+  assert.match(text, /and each new one's `after\.png`/);
+});
+
+test('only new screenshots: the comment says they are new, and none changed', () => {
+  const moments = [
+    { name: 'copy-skill-1-copied', test: 'copy-skill', after: 'a' },
+    { name: 'copy-skill-2-pasted', test: 'copy-skill', after: 'a' },
+  ];
+  const text = comment(moments, { diffs: 'https://diffs' });
+  assert.ok(text.startsWith(`${MARKER}\n## New screenshots\n2 new screenshots of the web tests have no baseline yet:`));
+  assert.doesNotMatch(text, /changed|differ|before\.png|diff\.png|slider/);
+  assert.match(text, /^\| `copy-skill-2-pasted` \| `copy-skill` \|$/m);
+  assert.match(text, /^Each one's `after\.png` \(this branch\): \[screenshot-diffs\]\(https:\/\/diffs\)\.$/m);
+  assert.match(text, /\*\*A person reviews them\.\*\* If the new UI is intended, add the label `accept-screenshots`/);
+});
+
+test('one new screenshot reads as one', () => {
+  const text = comment([{ name: 'narrow-screen-1-list', test: 'narrow-screen', after: 'a' }], {});
+  assert.match(text, /^## New screenshots\nA new screenshot of the web tests has no baseline yet:$/m);
+});
+
+test('a screenshot of a different size is changed, not new', () => {
+  const text = comment([{ name: 'welcome', test: 'read-skill', before: 'b', after: 'a' }], {});
+  assert.match(text, /^## Screenshots changed$/m);
+  assert.match(text, /^\| `welcome` \| `read-skill` \| a different size \|$/m);
+  assert.doesNotMatch(text, /new one|no baseline/);
 });
 
 test('one changed pixel reads as one', () => {

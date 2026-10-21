@@ -163,6 +163,54 @@ test('an organization that cannot be scanned → 400 and the message the CLI pri
   assert.deepEqual(await stopped.json(), { error: 'GitHub rate limit reached; try again in a minute' });
 });
 
+/** An organization scan as the page asks for it: one line per repository scanned, then the answer. */
+async function streamed(t: { after(fn: () => void): void }, url: string, fetch: Fetch) {
+  const view = await webView(t, open, owner(fetch));
+  const response = await view.get(`/api/scan?repo=${encodeURIComponent(url)}`, { Accept: 'application/x-ndjson, application/json' });
+  const text = await response.text();
+  return { response, lines: text.split('\n').filter(Boolean).map((line) => JSON.parse(line)), text };
+}
+
+test("an organization's answer streams: a line per repository scanned, then the same answer as plain JSON", async (t) => {
+  const { response, lines, text } = await streamed(t, 'https://github.com/acme', replay(ACME));
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') ?? '', /^application\/x-ndjson/);
+  assert.ok(text.endsWith('\n'), 'each line ends with a newline');
+  const plain = (await (await scannedOrganization(t, 'https://github.com/acme', replay(ACME))).json()) as WebOrganization;
+  assert.deepEqual(lines.at(-1), plain);
+  const progress = lines.slice(0, -1).map((line) => line.progress);
+  assert.deepEqual(progress.map(({ scanned, total }) => `${scanned} of ${total}`), ['0 of 4', '1 of 4', '2 of 4', '3 of 4', '4 of 4']);
+  for (const line of progress) assert.deepEqual(line.organization, { id: 'Acme', url: 'https://github.com/Acme' });
+  assert.deepEqual(
+    progress.flatMap(({ repository }) => (repository ? [repository] : [])).sort((a, b) => (a.id < b.id ? -1 : 1)),
+    plain.repositories,
+    'each repository with skills comes once, as the answer lists it',
+  );
+});
+
+test('a streamed organization scan that stops ends with the message the CLI prints; an unknown owner is still a 400', async (t) => {
+  const limited = replay({
+    ...ACME,
+    [`${API}/repos/Acme/tools/commits/main`]: { status: 403, body: { message: 'API rate limit exceeded for 192.0.2.1.' } },
+  });
+  const stopped = await streamed(t, 'https://github.com/acme', limited);
+  assert.equal(stopped.response.status, 200);
+  assert.deepEqual(stopped.lines.at(-1), { error: 'GitHub rate limit reached; try again in a minute' });
+
+  const unknown = replay({ [`${API}/users/no-such-owner`]: { status: 404, body: { message: 'Not Found' } } });
+  const missing = await streamed(t, 'https://github.com/no-such-owner', unknown);
+  assert.equal(missing.response.status, 400);
+  assert.deepEqual(missing.lines, [{ error: 'Organization or user not found: https://github.com/no-such-owner' }]);
+});
+
+test('a repository is answered as plain JSON, even when the page asks for a stream', async (t) => {
+  const view = await webView(t);
+  const response = await view.get(`/api/scan?repo=${encodeURIComponent(FIXTURE)}`, { Accept: 'application/x-ndjson, application/json' });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') ?? '', /^application\/json/);
+  assert.equal(((await response.json()) as WebScan).repository.id, 'fixture');
+});
+
 test('the page is served with a policy that runs only its own scripts', async (t) => {
   const view = await webView(t);
   const page = await view.get('/');

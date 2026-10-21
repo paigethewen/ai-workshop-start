@@ -2,7 +2,7 @@
 // video for the pull request's reviewer. Its key moments are screenshots, compared to the pixel with the
 // baselines in screenshots/. GitHub answers from github.json, so every run shows the same.
 // Add a case for a pull request's feature; keep the ones already here, they show the features merged so far.
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { ORGANIZATION, REPOSITORY } from './serve.ts';
 
@@ -56,6 +56,30 @@ test('read-skill: scan ./fixture, open a skill with copies in three agents, and 
   await pause(page, 3000);
 });
 
+test('copy-skill: scan ./fixture, open test-runner, and press "Copy SKILL.md" on its rendered body: the clipboard holds its SKILL.md as it is', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await scan(page, './fixture');
+  await shown(page, '#skills a');
+  await page.locator('#skills a', { hasText: 'test-runner' }).click();
+  await expect(page.locator('#skill-rendered')).toBeVisible();
+  await pause(page);
+  await page.click('#copy');
+  await expect(page.locator('#copy')).toHaveText('Copied');
+  const copied = await page.evaluate(() => (navigator as any).clipboard.readText() as Promise<string>);
+  // For the viewer: what was copied, pasted under the reader. The page itself has no such box.
+  await page.locator('#skill').evaluate((skill: any, text) => {
+    const label = Object.assign(skill.ownerDocument.createElement('p'), { textContent: 'Pasted from the clipboard:' });
+    label.style.margin = '1rem 1rem 0';
+    const pasted = Object.assign(skill.ownerDocument.createElement('textarea'), { value: text, rows: 8 });
+    pasted.style.cssText = 'display:block;width:90%;margin:1rem;font:14px monospace';
+    skill.append(label, pasted);
+  }, copied);
+  await page.locator('#skill textarea').scrollIntoViewIfNeeded();
+  await moment(page, 'copy-skill-1-copied');
+  await pause(page, 3000);
+  expect(copied).toBe(readFileSync(new URL('../../fixture/.claude/skills/test-runner/SKILL.md', import.meta.url), 'utf8'));
+});
+
 test('filter-skills: scan JetBrains/kotlin and filter its skills by "test": the word is marked in the list and in the open skill', async ({ page }) => {
   await scan(page, REPOSITORY);
   await shown(page, '#skills a');
@@ -82,21 +106,60 @@ test('filter-skills: scan JetBrains/kotlin and filter its skills by "test": the 
   await pause(page, 3000);
 });
 
-test('scan-organization: scan the modelcontextprotocol organization, open one of its repositories, and go back to the organization', async ({ page }) => {
+test('scan-organization: scan the modelcontextprotocol organization, count its repositories as they are scanned, open one of them, and go back to the organization', async ({ page }) => {
   await scan(page, ORGANIZATION);
-  await shown(page, '#repositories li');
+  // While it scans: how many repositories are done, and those with skills so far, not yet links.
+  await expect(page.locator('#organization-summary')).toHaveText(/^[1-9]\d* of \d+ repositories scanned$/);
+  await expect(page.locator('#repositories a:not([href])').first()).toBeVisible();
+  await shown(page, '#repositories a[href]');
   await moment(page, 'scan-organization-1-repositories');
   await pause(page, 3000);
   await page.mouse.wheel(0, 500);
   await pause(page);
   await page.mouse.wheel(0, -500);
   await pause(page, 1000);
-  await page.locator('#repositories a').first().click();
+  await page.locator('#repositories a[href]').first().click();
   await shown(page, '#skills a');
   await moment(page, 'scan-organization-2-repository');
   await pause(page, 3000);
   await page.goBack();
   await expect(page.locator('#organization')).toBeVisible();
   await moment(page, 'scan-organization-3-back');
+  await pause(page, 3000);
+});
+
+test.describe('a narrow screen', () => {
+  // A phone-sized window, narrower than the page's 820px breakpoint. The video keeps its size: the page is scaled into it.
+  test.use({ viewport: { width: 600, height: 900 } });
+
+  test('narrow-screen: scan ./fixture in a 600px-wide window: one column, the open skill below the list at full width', async ({ page }) => {
+    await scan(page, './fixture');
+    await shown(page, '#skills a');
+    await expect(page.locator('#skill-name')).toHaveText('code-review');
+    const list = (await page.locator('.sidebar').boundingBox())!;
+    const skill = (await page.locator('#skill').boundingBox())!;
+    expect(skill.y, 'the skill is below the list').toBeGreaterThanOrEqual(list.y + list.height - 1);
+    expect(skill.width, 'the skill takes the width of the window').toBeGreaterThanOrEqual(580);
+    await moment(page, 'narrow-screen-1-list');
+    await pause(page, 3000);
+    await page.mouse.wheel(0, 500);
+    await pause(page, 3000);
+  });
+});
+
+test('reload-skill: scan ./fixture, open test-runner, and reload: the same skill is open, its #<path> kept', async ({ page }) => {
+  await scan(page, './fixture');
+  await shown(page, '#skills a');
+  await pause(page);
+  await page.locator('#skills a', { hasText: 'test-runner' }).click();
+  await expect(page.locator('#skill-name')).toHaveText('test-runner');
+  await expect(page).toHaveURL(/\?repo=\.%2Ffixture#\.claude%2Fskills%2Ftest-runner%2FSKILL\.md$/);
+  await moment(page, 'reload-skill-1-open');
+  await pause(page, 3000);
+  await page.reload();
+  await shown(page, '#skills a');
+  await expect(page.locator('#skill-name')).toHaveText('test-runner');
+  await expect(page).toHaveURL(/\?repo=\.%2Ffixture#\.claude%2Fskills%2Ftest-runner%2FSKILL\.md$/);
+  await moment(page, 'reload-skill-2-reloaded');
   await pause(page, 3000);
 });

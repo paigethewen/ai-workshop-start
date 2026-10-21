@@ -14,27 +14,38 @@ export type OrganizationResult = {
   warnings: string[];
 };
 
-/** Repositories scanned at the same time: each is a few requests, and GitHub limits bursts. */
-const AT_ONCE = 4;
+/** After each repository: how many were scanned, of how many; and the repository's result, if it could be scanned. */
+export type Progress = { scanned: number; total: number; result?: ScanResult };
 
-/** Every repository, scanned as one; a repository that cannot be scanned is a warning, unless GitHub is unavailable. */
-export async function scanOrganization(organization: Organization): Promise<OrganizationResult> {
+/** Repositories scanned at the same time: each is a few requests, and GitHub limits bursts. */
+const AT_ONCE = 8;
+
+/**
+ * Every repository, scanned as one; a repository that cannot be scanned is a warning, unless GitHub is unavailable.
+ * `onProgress` hears of the start, then of each repository as it is scanned, until the scan stops.
+ */
+export async function scanOrganization(organization: Organization, onProgress?: (progress: Progress) => void): Promise<OrganizationResult> {
   const { repositories } = organization;
   const results: { id: string; result?: ScanResult; warnings: string[] }[] = [];
   let next = 0;
   let stopped = false;
+  // A stopped scan reports nothing more: the repositories still being scanned are not its answer.
+  const scanned = (result?: ScanResult) => stopped || onProgress?.({ scanned: results.length, total: repositories.length, result });
+  scanned();
   async function worker() {
     while (!stopped && next < repositories.length) {
       const { id, open } = repositories[next++];
       try {
         const result = await scan(await open());
         results.push({ id, result, warnings: result.warnings });
+        scanned(result);
       } catch (error) {
         if (!(error instanceof AtlasError) || error instanceof GitHubUnavailable) {
           stopped = true;
           throw error;
         }
         results.push({ id, warnings: [error.message] });
+        scanned();
       }
     }
   }

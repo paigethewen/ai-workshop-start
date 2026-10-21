@@ -161,15 +161,16 @@ test('./fixture warns only about the malformed skill, the differing copies and t
   assert.ok(warnings().some((line) => /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /.test(line)));
 });
 
-test('this repository has only its own address-comment, code-review, demo-video, issue-to-pr, red-agent and status-update skills: fixture/ is test data, so the count is 6 and the exit code 0', async () => {
+test('this repository has only its own address-comment, code-review, demo-video, issue-to-pr, red-agent, resolve-conflicts and status-update skills: fixture/ is test data, so the count is 7 and the exit code 0', async () => {
   const scanned = await atlas(['scan', REPOSITORY]);
   assert.equal(scanned.code, 0, scanned.stderr);
-  assert.match(scanned.stdout, /^\S+ · 6 skills$/m);
+  assert.match(scanned.stdout, /^\S+ · 7 skills$/m);
   assert.match(scanned.stdout, /^address-comment — /m);
   assert.match(scanned.stdout, /^code-review — /m);
   assert.match(scanned.stdout, /^demo-video — /m);
   assert.match(scanned.stdout, /^issue-to-pr — /m);
   assert.match(scanned.stdout, /^red-agent — /m);
+  assert.match(scanned.stdout, /^resolve-conflicts — /m);
   assert.match(scanned.stdout, /^status-update — /m);
 });
 
@@ -252,6 +253,34 @@ test('an unknown ref → a clear message, exit code 1', async () => {
   });
   await assert.rejects(openGitHub('https://github.com/JetBrains/pinned/tree/no-such-ref', { fetch: unknown }), {
     message: 'Not found in https://github.com/JetBrains/pinned: no-such-ref',
+  });
+});
+
+test('an unknown ref, which GitHub answers with 422, → the same clear message, exit code 1', async () => {
+  const api = 'https://api.github.com/repos/JetBrains/pinned';
+  // What GitHub answers for a ref that is no branch, tag or commit: 422, not 404.
+  const unknown = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/pinned', default_branch: 'main' } },
+    [`${api}/commits/no-such-ref`]: {
+      status: 422,
+      body: { message: 'No commit found for SHA: no-such-ref', documentation_url: 'https://docs.github.com/rest/commits/commits#get-a-commit', status: '422' },
+    },
+  });
+  const open = (input: string) => openGitHub(input, { fetch: unknown });
+  const scanned = await atlas(['scan', 'https://github.com/JetBrains/pinned/tree/no-such-ref'], { open });
+  assert.deepEqual([scanned.code, scanned.stderr], [1, 'Not found in https://github.com/JetBrains/pinned: no-such-ref']);
+});
+
+test('another 422 → GitHub\'s answer, not "Not found"', async () => {
+  const api = 'https://api.github.com/repos/JetBrains/searched';
+  const search = 'https://api.github.com/search/code?q=filename:SKILL.md+repo:JetBrains/searched&per_page=100&page=1';
+  const invalid = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/searched', default_branch: 'main' } },
+    [`${api}/commits/main`]: { status: 200, body: { sha: EXAMPLE_COMMIT } },
+    [search]: { status: 422, body: { message: 'Validation Failed' } },
+  });
+  await assert.rejects(openGitHub('https://github.com/JetBrains/searched', { fetch: invalid, token: 'test' }), {
+    message: `GitHub answered 422 for ${search}: Validation Failed`,
   });
 });
 

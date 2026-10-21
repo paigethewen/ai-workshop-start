@@ -1,4 +1,4 @@
-// node e2e/web/report.ts: after a run of the web tests, the screenshots that differ from their baselines, from
+// node e2e/web/report.ts: after a run of the web tests, the screenshots that differ from their baselines or have none, from
 // playwright-report/results.json. Copies each one's before (the baseline), after (this run) and diff to
 // screenshot-diffs/<name>/, and prints the Markdown that CI posts on the pull request: a person reviews them.
 // The links come from the environment: DIFFS_URL, REPORT_URL and VIDEOS_URL, the run's artifacts.
@@ -48,19 +48,38 @@ export function comment(moments: Changed[], links: { diffs?: string; report?: st
   if (moments.length === 0) {
     return [MARKER, '## Screenshots', `Every screenshot of the web tests is as its baseline. Videos of the run: ${link('web-videos', links.videos)}.`].join('\n');
   }
-  const what = (moment: Changed) =>
-    !moment.before ? 'new: no baseline yet' : moment.pixels === undefined ? 'a different size' : `${moment.pixels.toLocaleString('en-US')} pixel${moment.pixels === 1 ? '' : 's'}`;
+  // A screenshot without a baseline is new, not changed: it is listed apart, with only its after.
+  const differ = moments.filter((moment) => moment.before);
+  const added = moments.filter((moment) => !moment.before);
+  const what = (moment: Changed) => (moment.pixels === undefined ? 'a different size' : `${moment.pixels.toLocaleString('en-US')} pixel${moment.pixels === 1 ? '' : 's'}`);
+  const of = differ.length === 0 ? ' of the web tests' : '';
   return [
     MARKER,
-    '## Screenshots changed',
-    moments.length === 1 ? 'A screenshot of the web tests differs from its baseline:' : `${moments.length} screenshots of the web tests differ from their baselines:`,
-    '',
-    '| Screenshot | Test | Changed |',
-    '| --- | --- | --- |',
-    ...moments.map((moment) => `| \`${moment.name}\` | \`${moment.test}\` | ${what(moment)} |`),
-    '',
-    `Each one's \`before.png\` (the baseline), \`after.png\` (this branch) and \`diff.png\`, changed pixels in red: ${link('screenshot-diffs', links.diffs)}.`,
-    `Side by side, with a slider, in the HTML report: ${link('web-report', links.report)} (open \`index.html\`). Videos of the run: ${link('web-videos', links.videos)}.`,
+    differ.length === 0 ? '## New screenshots' : '## Screenshots changed',
+    ...(differ.length === 0
+      ? []
+      : [
+          differ.length === 1 ? 'A screenshot of the web tests differs from its baseline:' : `${differ.length} screenshots of the web tests differ from their baselines:`,
+          '',
+          '| Screenshot | Test | Changed |',
+          '| --- | --- | --- |',
+          ...differ.map((moment) => `| \`${moment.name}\` | \`${moment.test}\` | ${what(moment)} |`),
+          '',
+        ]),
+    ...(added.length === 0
+      ? []
+      : [
+          added.length === 1 ? `A new screenshot${of} has no baseline yet:` : `${added.length} new screenshots${of} have no baseline yet:`,
+          '',
+          '| Screenshot | Test |',
+          '| --- | --- |',
+          ...added.map((moment) => `| \`${moment.name}\` | \`${moment.test}\` |`),
+          '',
+        ]),
+    differ.length === 0
+      ? `Each one's \`after.png\` (this branch): ${link('screenshot-diffs', links.diffs)}.`
+      : `Each changed one's \`before.png\` (the baseline), \`after.png\` (this branch) and \`diff.png\`, changed pixels in red${added.length === 0 ? '' : ", and each new one's `after.png`"}: ${link('screenshot-diffs', links.diffs)}.`,
+    `${differ.length === 0 ? 'In' : 'Side by side, with a slider, in'} the HTML report: ${link('web-report', links.report)} (open \`index.html\`). Videos of the run: ${link('web-videos', links.videos)}.`,
     '',
     `**A person reviews them.** If the new UI is intended, add the label \`${LABEL}\`: the Screenshots workflow takes them again on Linux, in the tests' image, and commits them to this branch as the new baselines. If not, fix the change.`,
   ].join('\n');
