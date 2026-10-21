@@ -2,7 +2,7 @@
 // video for the pull request's reviewer. Its key moments are screenshots, compared to the pixel with the
 // baselines in screenshots/. GitHub answers from github.json, so every run shows the same.
 // Add a case for a pull request's feature; keep the ones already here, they show the features merged so far.
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { ORGANIZATION, REPOSITORY } from './serve.ts';
 
@@ -54,6 +54,30 @@ test('read-skill: scan ./fixture, open a skill with copies in three agents, and 
   await expect(page.locator('#skill-source')).toBeVisible();
   await moment(page, 'read-skill-3-source');
   await pause(page, 3000);
+});
+
+test('copy-skill: scan ./fixture, open test-runner, and press "Copy SKILL.md" on its rendered body: the clipboard holds its SKILL.md as it is', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await scan(page, './fixture');
+  await shown(page, '#skills a');
+  await page.locator('#skills a', { hasText: 'test-runner' }).click();
+  await expect(page.locator('#skill-rendered')).toBeVisible();
+  await pause(page);
+  await page.click('#copy');
+  await expect(page.locator('#copy')).toHaveText('Copied');
+  const copied = await page.evaluate(() => (navigator as any).clipboard.readText() as Promise<string>);
+  // For the viewer: what was copied, pasted under the reader. The page itself has no such box.
+  await page.locator('#skill').evaluate((skill: any, text) => {
+    const label = Object.assign(skill.ownerDocument.createElement('p'), { textContent: 'Pasted from the clipboard:' });
+    label.style.margin = '1rem 1rem 0';
+    const pasted = Object.assign(skill.ownerDocument.createElement('textarea'), { value: text, rows: 8 });
+    pasted.style.cssText = 'display:block;width:90%;margin:1rem;font:14px monospace';
+    skill.append(label, pasted);
+  }, copied);
+  await page.locator('#skill textarea').scrollIntoViewIfNeeded();
+  await moment(page, 'copy-skill-1-copied');
+  await pause(page, 3000);
+  expect(copied).toBe(readFileSync(new URL('../../fixture/.claude/skills/test-runner/SKILL.md', import.meta.url), 'utf8'));
 });
 
 test('filter-skills: scan JetBrains/kotlin and filter its skills by "test": the word is marked in the list and in the open skill', async ({ page }) => {
