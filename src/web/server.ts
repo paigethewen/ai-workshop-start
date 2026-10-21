@@ -1,14 +1,14 @@
-// The web view: the same scan, of a repository or an organization, as JSON, and a page that lists
-// the skills and shows each SKILL.md.
+// The web view: the same scan, of a repository or an organization, as JSON, an organization's as it
+// goes too, and a page that lists the skills and shows each SKILL.md.
 // Local only: it listens on 127.0.0.1 and answers only requests addressed to it. Nothing is stored.
 import { readFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { Marked } from 'marked';
 import { AtlasError } from '../core/errors.ts';
 import { skillLink } from '../core/model.ts';
-import { scanOrganization, type Organization } from '../core/organization.ts';
+import { scanOrganization, type Organization, type Progress } from '../core/organization.ts';
 import { parseSkill } from '../core/parse.ts';
-import { scan, type Source } from '../core/scan.ts';
+import { scan, type ScanResult, type Source } from '../core/scan.ts';
 
 export type WebOptions = {
   /** Opens what the user asked to scan, as the CLI does. */
@@ -61,10 +61,22 @@ export function createWebServer(options: WebOptions): Server {
       if (!input) return json(400, { error: 'Enter a GitHub URL or a directory' });
       try {
         const organization = options.openOrganization?.(input);
+        if (organization && /application\/x-ndjson/.test(request.headers.accept ?? '')) {
+          // An unknown owner is still a 400: the stream starts once the organization is open.
+          const opened = await organization;
+          response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', ...SECURITY });
+          // A page that went elsewhere has closed the connection: the rest of its answer is dropped.
+          const line = (body: unknown) => response.destroyed || response.write(`${JSON.stringify(body)}\n`);
+          try {
+            line(await scanOrganizationForWeb(opened, (progress) => line({ progress })));
+          } catch (error) {
+            line({ error: failure(error) });
+          }
+          return response.end();
+        }
         return json(200, organization ? await scanOrganizationForWeb(await organization) : await scanForWeb(input, options));
       } catch (error) {
-        if (error instanceof AtlasError) return json(400, { error: error.message });
-        return json(500, { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` });
+        return json(error instanceof AtlasError ? 400 : 500, { error: failure(error) });
       }
     }
 
@@ -109,31 +121,39 @@ export type WebScan = {
   warnings: string[];
 };
 
+/** A repository of an organization, with its skills' names. */
+export type WebRepository = { id: string; url: string; commit: string; skills: string[] };
+
 /** What the page shows for an organization: what the CLI prints, and each repository's skill names. */
 export type WebOrganization = {
   organization: { id: string; url: string };
   /** How many repositories were scanned, forks aside. */
   total: number;
   /** The repositories with skills, most skills first, then by id. */
-  repositories: { id: string; url: string; commit: string; skills: string[] }[];
+  repositories: WebRepository[];
   /** Each one names its repository. */
   warnings: string[];
 };
 
+/** An organization's scan as it goes: how many repositories were scanned, and the last one, if it has skills. */
+export type WebProgress = { organization: { id: string; url: string }; scanned: number; total: number; repository?: WebRepository };
+
 /** Every repository of the organization, as `scan` counts them; a repository opens with its own scan. */
-export async function scanOrganizationForWeb(organization: Organization): Promise<WebOrganization> {
-  const result = await scanOrganization(organization);
+export async function scanOrganizationForWeb(organization: Organization, onProgress?: (progress: WebProgress) => void): Promise<WebOrganization> {
+  const owner = { id: organization.id, url: `https://github.com/${organization.id}` };
+  const progress = ({ scanned, total, result }: Progress) =>
+    onProgress?.({ organization: owner, scanned, total, ...(result?.skills.length ? { repository: webRepository(result) } : {}) });
+  const result = await scanOrganization(organization, progress);
   return {
-    organization: { id: result.id, url: `https://github.com/${result.id}` },
+    organization: owner,
     total: result.total,
-    repositories: result.repositories.map(({ repository: { id, url, commit }, skills }) => ({
-      id,
-      url,
-      commit,
-      skills: skills.map((skill) => skill.name),
-    })),
+    repositories: result.repositories.map(webRepository),
     warnings: result.warnings,
   };
+}
+
+function webRepository({ repository: { id, url, commit }, skills }: ScanResult): WebRepository {
+  return { id, url, commit, skills: skills.map((skill) => skill.name) };
 }
 
 /** One scan; the SKILL.md files it read anyway are kept for the answer, so opening one costs nothing. */
@@ -166,6 +186,12 @@ export async function scanForWeb(input: string, { open }: WebOptions): Promise<W
     }),
     warnings: result.warnings,
   };
+}
+
+/** What the page shows for a scan that failed: the CLI's message, or an unexpected one. */
+function failure(error: unknown): string {
+  if (error instanceof AtlasError) return error.message;
+  return `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
 }
 
 function isLocalHost(host: string | undefined): boolean {

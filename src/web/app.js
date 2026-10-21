@@ -1,6 +1,6 @@
 // The web view's page: scans through /api/scan and shows one skill at a time, or an organization's
-// repositories with skills. The address keeps the repository or the owner in ?repo= and the open
-// skill in #<path>, so a reload or a shared link shows the same.
+// repositories with skills, as they are found. The address keeps the repository or the owner in
+// ?repo= and the open skill in #<path>, so a reload or a shared link shows the same.
 import { excerpt, marked, matches, words as wordsIn } from './filter.js';
 
 const $ = (id) => document.getElementById(id);
@@ -9,6 +9,10 @@ let current;
 let organization;
 /** The filter's words, marked in the list and in the open skill. */
 let words = [];
+/** Stops the scan in progress, whose answer the page no longer wants. */
+let scanning;
+/** The organization's repositories with skills found so far, in their final order: most skills first, then by id. */
+let found = [];
 
 /** The agent behind each agent folder, for the badges. */
 const AGENTS = {
@@ -42,11 +46,13 @@ function scanRepo(repo) {
 function fromAddress() {
   const repo = new URLSearchParams(location.search).get('repo');
   if (!repo) {
+    stop();
     current = undefined;
     screen('welcome');
   } else if (repo !== current?.input) {
     $('repo').value = repo;
     if (repo === organization?.input) {
+      stop();
       current = organization;
       renderOrganization();
     } else load(repo);
@@ -59,22 +65,35 @@ function screen(name) {
 }
 
 async function load(repo) {
+  stop();
+  const controller = (scanning = new AbortController());
   current = undefined;
   document.body.classList.add('loading');
   $('scan-button').disabled = true;
   let body;
   try {
-    const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}`);
-    body = await response.json();
-    if (!response.ok) throw new Error(body.error);
+    // An organization's answer streams, so the page shows its repositories as they are scanned.
+    const response = await fetch(`/api/scan?repo=${encodeURIComponent(repo)}`, {
+      headers: { Accept: 'application/x-ndjson, application/json' },
+      signal: controller.signal,
+    });
+    body = response.headers.get('content-type')?.startsWith('application/x-ndjson')
+      ? await streamed(response, (progress) => controller.signal.aborted || renderProgress(progress))
+      : await response.json();
+    if (!response.ok || body.error) throw new Error(body.error);
   } catch (error) {
+    if (controller.signal.aborted) return;
     $('problem-message').textContent = error.message;
     screen('problem');
     return;
   } finally {
-    document.body.classList.remove('loading');
-    $('scan-button').disabled = false;
+    // Done: nothing left to abort, only the spinner to stop; unless another scan took its place.
+    if (scanning === controller) {
+      scanning = undefined;
+      stop();
+    }
   }
+  if (controller.signal.aborted) return;
   current = { input: repo, ...body };
   if (current.organization) {
     organization = current;
@@ -82,33 +101,80 @@ async function load(repo) {
   } else render();
 }
 
+/** Ends the scan in progress, if any: its answer, or what is left of it, is not shown. */
+function stop() {
+  scanning?.abort();
+  scanning = undefined;
+  document.body.classList.remove('loading');
+  $('scan-button').disabled = false;
+}
+
+/** Reads an answer of one JSON object per line: each `{ progress }` line as it comes; resolves to the answer, the last line. */
+async function streamed(response, onProgress) {
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let text = '';
+  let last;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const lines = (text + value).split('\n');
+    text = lines.pop();
+    for (const line of lines.filter(Boolean)) {
+      last = JSON.parse(line);
+      if (last.progress) onProgress(last.progress);
+    }
+  }
+  return last && !last.progress ? last : { error: 'The scan ended without an answer' };
+}
+
+/** `<owner> · N of M repositories scanned`, then the repositories with skills so far; they open once the scan ends. */
+function renderProgress({ organization: owner, scanned, total, repository }) {
+  if (scanned === 0) {
+    found = [];
+    window.scrollTo(0, 0);
+  }
+  if (repository) {
+    found.push(repository);
+    found.sort((a, b) => b.skills.length - a.skills.length || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+  $('organization-id').textContent = owner.id;
+  $('organization-summary').textContent = `${scanned} of ${total} ${total === 1 ? 'repository' : 'repositories'} scanned`;
+  $('repositories').replaceChildren(...found.map((repository) => repositoryItem(repository, false)));
+  $('no-repositories').hidden = true;
+  $('organization-warnings').hidden = true;
+  screen('organization');
+}
+
 /** `<owner> · N of M repositories with skills`, then each of them; one opens with its own scan. */
 function renderOrganization() {
   const { repositories, total, warnings } = current;
   $('organization-id').textContent = current.organization.id;
   $('organization-summary').textContent = `${repositories.length} of ${total} ${total === 1 ? 'repository' : 'repositories'} with skills`;
-  $('repositories').replaceChildren(
-    ...repositories.map((repository) => {
-      const item = document.createElement('li');
-      const link = document.createElement('a');
-      link.href = `?repo=${encodeURIComponent(repository.url)}`;
-      link.addEventListener('click', (event) => {
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
-        event.preventDefault();
-        $('repo').value = repository.url;
-        scanRepo(repository.url);
-      });
-      const title = element('span', 'item-title', repository.id);
-      title.append(element('span', 'count', `${repository.skills.length} ${repository.skills.length === 1 ? 'skill' : 'skills'}`));
-      link.append(title, element('span', 'item-description', repository.skills.join(', ')));
-      item.append(link);
-      return item;
-    }),
-  );
+  $('repositories').replaceChildren(...repositories.map((repository) => repositoryItem(repository, true)));
   $('no-repositories').hidden = repositories.length > 0;
   folded($('organization-warnings'), warnings);
   screen('organization');
   window.scrollTo(0, 0);
+}
+
+/** A repository of an organization: its id, its count and its skills' names; a link to its own scan, if it opens. */
+function repositoryItem(repository, opens) {
+  const item = document.createElement('li');
+  const link = document.createElement('a');
+  if (opens) {
+    link.href = `?repo=${encodeURIComponent(repository.url)}`;
+    link.addEventListener('click', (event) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+      event.preventDefault();
+      $('repo').value = repository.url;
+      scanRepo(repository.url);
+    });
+  }
+  const title = element('span', 'item-title', repository.id);
+  title.append(element('span', 'count', `${repository.skills.length} ${repository.skills.length === 1 ? 'skill' : 'skills'}`));
+  link.append(title, element('span', 'item-description', repository.skills.join(', ')));
+  item.append(link);
+  return item;
 }
 
 function render() {

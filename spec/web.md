@@ -3,6 +3,7 @@
 Enter a GitHub URL or a directory; the page lists every unique skill, and opens each one's `SKILL.md`.
 Enter `https://github.com/<owner>`: the page lists the organization's repositories with skills, as `scan` does.
 `GITHUB_TOKEN`, as for `scan`. *Nothing is stored*: each scan is one request, its answer is all there is.
+An organization's answer streams, for `Accept: application/x-ndjson`: a line per repository scanned, `{ progress }`, then the answer, or `{ error }`.
 ## The page
 - Before a scan: what Skill Atlas does, and example repositories to scan with one click
 - While scanning, the button spins; a failed scan → its message in place of the results
@@ -19,6 +20,7 @@ Enter `https://github.com/<owner>`: the page lists the organization's repositori
 - The **same repositories** as `scan https://github.com/<owner>`: the same counts, order and warnings; forks skipped
 - `<owner> · N of M repositories with skills`; the warnings, folded, above it
 - Each repository: its `owner/repo`, `N skills`, and its skills' names
+- While scanning: `<owner> · N of M repositories scanned`, and the repositories with skills found so far, in their final order; they open once the scan ends
 - A repository opens with its own scan, as if its URL were entered; back returns to the organization without scanning it again
 - No repositories with skills → a note that forks are skipped
 - An unknown owner, a rate limit, a rejected token or GitHub out of reach → its `scan` message on the page

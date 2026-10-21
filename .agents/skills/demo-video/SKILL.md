@@ -18,7 +18,7 @@ Never commit a video, or any binary but the baselines, and never a baseline your
 
 - `read-skill`: scan `./fixture`, open a skill with copies in three agents, switch from its rendered body to its `SKILL.md`
 - `filter-skills`: scan `JetBrains/kotlin`, filter by `test`: the word is marked in the list and in the open skill
-- `scan-organization`: scan `modelcontextprotocol`, open one of its repositories, go back to the organization
+- `scan-organization`: scan `modelcontextprotocol`, count its repositories as they are scanned, open one of them, go back to the organization
 
 When no case shows the pull request's feature, add one named after it, built like the others: start from a scan, act through the page's own controls (`#repo`, `#filter`, the list's links, the tabs), wait for what the page shows before each pause and each `moment`, and end on the page that proves the feature.
 Scan `./fixture`, or a GitHub repository already in `github.json`; a new one needs `GITHUB_TOKEN=$(gh auth token) node e2e/web/record.ts` with the repository added to it, and changes the data, and so the screenshots, of the cases that scan it. Keep the existing cases: they show the features merged so far.
