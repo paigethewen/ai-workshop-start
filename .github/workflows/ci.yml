@@ -112,6 +112,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           FROM: ${{ steps.baseline.outputs.from }}
+          PR: ${{ github.event.pull_request.number }}
           REPORT: ${{ steps.report.outputs.artifact-url }}
         run: |
           {
@@ -120,18 +121,18 @@ jobs:
             # Without a baseline, Playwright writes every screenshot as an "actual": none of them changed.
             changed=$([ "$FROM" = none ] || find test-results -name '*-actual.png' 2>/dev/null | sort)
             if [ -n "$changed" ]; then
-              echo "Changed or new, as expected, actual and diff in [visual-report]($REPORT) (open \`playwright-report/index.html\`):"
+              echo "Changed or new: before, after and diff inline in the \`visual-diff\` job's summary${PR:+ and on the pull request}; the HTML report in [visual-report]($REPORT):"
               for file in $changed; do echo "- \`$(basename "$file" -actual.png)\`"; done
               echo "If the new UI is intended, a maintainer comments \`/accept-screenshots\` on the pull request."
             fi
             echo "Every case's video: the \`demo-videos\` artifact."
           } >> "$GITHUB_STEP_SUMMARY"
-  # Changed screenshots, before, after and diff, in one comment on the pull request, for a human to review.
-  # The images go to the visual-diffs branch, which holds nothing else, so the comment can show them.
-  # No pull request code runs here: only the images from the visual job's artifact.
-  visual-diff-comment:
+  # Changed screenshots, before, after and diff, shown inline for a human to review: in this run's summary, and on
+  # a pull request in one comment too. The images go to the visual-diffs branch, which holds nothing else, so the
+  # summary and the comment can show them. No pull request code runs here: only the images from the visual job's artifact.
+  visual-diff:
     needs: visual
-    if: ${{ always() && needs.visual.result == 'failure' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ always() && needs.visual.result == 'failure' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -146,14 +147,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-          SHA: ${{ github.event.pull_request.head.sha }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN: ${{ github.run_id }}-${{ github.run_attempt }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           changed=$(find report/test-results -name '*-actual.png' 2>/dev/null | sort)
           [ -n "$changed" ] || { echo "The visual job failed before any screenshot differed: see its log"; exit 0; }
-          dir="pr-$PR/$RUN"
+          if [ -n "$PR" ]; then dir="pr-$PR/$RUN"; else dir="$GITHUB_REF_NAME/$RUN"; fi
           raw="https://raw.githubusercontent.com/$REPO/visual-diffs/$dir"
           git init -q diffs
           cd diffs
@@ -176,16 +177,18 @@ jobs:
             fi
           done
           git add "$dir"
-          git commit -q -m "Screenshots changed by #$PR at $SHA"
+          git commit -q -m "Screenshots changed ${PR:+by #$PR }at $SHA"
           for attempt in 1 2 3; do git push -q origin visual-diffs && break; git pull -q --rebase origin visual-diffs; done
-          marker='<!-- visual-diff -->'
-          body="$marker
-          ## Screenshots changed
+          table="## Screenshots changed
           At $SHA, [this run]($RUN_URL) shows a different UI than the baseline: before, after, and the changed pixels in red.
 
-          | Screenshot | Before (baseline) | After (this pull request) | Diff |
+          | Screenshot | Before (baseline) | After (this change) | Diff |
           |---|---|---|---|
-          $rows
-          If the new UI is intended, a maintainer comments \`/accept-screenshots\`: it becomes this pull request's baseline and CI runs again. The HTML report, with a slider over each image, is in the run's \`visual-report\` artifact."
+          $rows"
+          accept="If the new UI is intended, a maintainer comments \`/accept-screenshots\` on the pull request: it becomes its baseline and CI runs again. The HTML report, with a slider over each image, is in the run's \`visual-report\` artifact."
+          printf '%s\n%s\n' "$table" "$accept" >> "$GITHUB_STEP_SUMMARY"
+          [ -n "$PR" ] || exit 0
+          marker='<!-- visual-diff -->'
+          body=$(printf '%s\n%s\n%s\n' "$marker" "$table" "$accept")
           id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | tail -1)
           if [ -n "$id" ]; then gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null; else gh pr comment "$PR" --repo "$REPO" --body "$body"; fi

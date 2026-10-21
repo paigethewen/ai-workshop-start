@@ -38,7 +38,7 @@ Locally nothing is compared: another machine's fonts differ from CI's. Look at t
 After the push, wait for CI's visual job on the pull request; its summary lists the screenshots that changed.
 
 - Green: the UI is unchanged, to the pixel
-- Red, with a `Screenshots changed` comment on the pull request: before, after and diff of each changed screenshot. A change the pull request did not mean is a bug: fix it and push again. A change it means is for a human to accept: say in the pull request body which screenshots change and why, and wait
+- Red, with a `Screenshots changed` comment on the pull request and the same table in the `visual-diff` job's summary: before, after and diff of each changed screenshot, inline. A change the pull request did not mean is a bug: fix it and push again. A change it means is for a human to accept: say in the pull request body which screenshots change and why, and wait
 - Red without the comment: a case failed; its error and the HTML report are in the `visual-report` artifact
 
 ```bash
