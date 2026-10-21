@@ -40,4 +40,4 @@ The same skill is often kept for several agents: `.claude/skills/x` for Claude a
 - A truncated GitHub tree without `GITHUB_TOKEN` looks only in root-level agent folders; the warning says nested ones were skipped
 ## Test fixture
 `fixture/` holds one case per rule above; [fixture/README.md](../fixture/README.md) maps each path to its case.
-The test-data rule means `./skill-atlas scan .` on this repository finds *none* of them, only the repository's own `address-comment`, `code-review`, `demo-video`, `issue-to-pr` and `red-agent` skills: the tests scan `./fixture` directly.
+The test-data rule means `./skill-atlas scan .` on this repository finds *none* of them, only the repository's own `address-comment`, `code-review`, `demo-video`, `issue-to-pr`, `red-agent` and `resolve-conflicts` skills: the tests scan `./fixture` directly.
