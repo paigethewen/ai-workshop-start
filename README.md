@@ -14,7 +14,7 @@ build-tools-bump-gradle-api — Bumps the Gradle API version that Kotlin Gradle 
 ```
 
 A whole organization or user, `./skill-atlas scan https://github.com/<owner>`, counts the skills in each of its
-repositories, forks aside:
+repositories, forks aside, 8 at a time; on a terminal, `Scanning <owner>: N of M repositories` shows how far it is:
 
 ```console
 $ ./skill-atlas scan https://github.com/anthropics
@@ -26,8 +26,8 @@ anthropics/cwc-workshops · 8 skills
 
 Or browse them: `./skill-atlas serve` opens a web view on <http://127.0.0.1:4173/>. Enter a GitHub URL or a local
 directory, then pick a skill to read its `SKILL.md`, rendered or as it is; the filter finds skills by name or contents and
-marks what it found. Enter an owner's URL to list its repositories with skills, and pick one to scan it. `--port <port>`
-picks another port.
+marks what it found. Enter an owner's URL to list its repositories with skills, as they are found, and pick one to scan
+it. `--port <port>` picks another port.
 
 Set `GITHUB_TOKEN` for a higher GitHub rate limit: an organization of more than a few dozen repositories needs it. `npm test` runs the tests.
 

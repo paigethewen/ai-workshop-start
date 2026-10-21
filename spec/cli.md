@@ -28,6 +28,8 @@ anthropics/cwc-workshops · 8 skills
 - The repositories that have skills, by **skill count**, most first, then by name; the others are only counted
 - Each count is of **unique skills**, as for one repository
 - **Forks are skipped**, neither scanned nor counted: their skills are their upstream's
+- **8 repositories at a time**: each is a few requests, and GitHub limits bursts
+- On a terminal, *stderr* shows `Scanning <owner>: N of M repositories`, rewritten in place and cleared before the result; stdout is still printed at once
 - Each repository is listed from its tree at its default branch, even with `GITHUB_TOKEN`: code search's limit is too low for many repositories
   - A truncated tree warns as for one repository; the hint is to scan that repository alone
 - Warnings name their repository: `warning: <owner>/<repo>: <warning>`, to *stderr*
