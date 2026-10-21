@@ -60,6 +60,11 @@
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
           <input id="filter" type="search" placeholder="Filter skills" aria-label="Filter skills">
         </label>
+        <div class="grouping">
+          <button type="button" id="group" class="ghost" aria-describedby="group-note">Group with Claude</button>
+          <span id="group-note" class="group-note">Sends the listed skills' names, descriptions and paths to Claude Haiku</span>
+        </div>
+        <p id="group-problem" class="group-problem" role="alert" hidden></p>
       </div>
       <details id="warnings" class="warnings" hidden><summary></summary><ul></ul></details>
       <ul id="skills" class="skill-list"></ul>

@@ -2,20 +2,27 @@
 // the skills and shows each SKILL.md.
 // Local only: it listens on 127.0.0.1 and answers only requests addressed to it. Nothing is stored.
 import { readFile } from 'node:fs/promises';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { Marked } from 'marked';
 import { AtlasError } from '../core/errors.ts';
 import { skillLink } from '../core/model.ts';
 import { scanOrganization, type Organization } from '../core/organization.ts';
 import { parseSkill } from '../core/parse.ts';
 import { scan, type Source } from '../core/scan.ts';
+import { groupSkills, ModelError, type AskModel, type GroupedSkill } from './groups.ts';
 
 export type WebOptions = {
   /** Opens what the user asked to scan, as the CLI does. */
   open(input: string): Promise<Source>;
   /** Opens an organization, when the input names one without a repository; undefined otherwise. */
   openOrganization?(input: string): Promise<Organization> | undefined;
+  /** The model that groups skills by topic; without it the page cannot group with a model. */
+  ask?: AskModel;
 };
+
+/** A repository's skills fit; more is not a list from this page. */
+const MAX_BODY = 1_000_000;
+const MAX_SKILLS = 1000;
 
 /** The page's files, served as they are: no build step. */
 const STATIC: Record<string, { file: string; type: string }> = {
@@ -54,6 +61,26 @@ export function createWebServer(options: WebOptions): Server {
 
     // Another site's page, through a name that resolves here, must not scan this machine's directories.
     if (!isLocalHost(request.headers.host)) return json(403, { error: 'The web view answers only on localhost' });
+
+    if (url.pathname === '/api/groups') {
+      if (request.method !== 'POST') return json(405, { error: 'Only POST' });
+      // Another site's form can POST plain text here without asking first, not JSON: no model call on its behalf.
+      if (!/^application\/json\b/i.test(request.headers['content-type'] ?? '')) return json(415, { error: 'Send the skills as JSON' });
+      if (!options.ask) return json(501, { error: 'Grouping with a model is not available here' });
+      let skills: GroupedSkill[];
+      try {
+        skills = parseGroupRequest(await body(request));
+      } catch (error) {
+        return json(400, { error: error instanceof AtlasError ? error.message : 'Send the skills as JSON' });
+      }
+      try {
+        return json(200, { groups: await groupSkills(skills, options.ask) });
+      } catch (error) {
+        if (error instanceof ModelError) return json(502, { error: error.message });
+        return json(500, { error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+
     if (request.method !== 'GET') return json(405, { error: 'Only GET' });
 
     if (url.pathname === '/api/scan') {
@@ -166,6 +193,31 @@ export async function scanForWeb(input: string, { open }: WebOptions): Promise<W
     }),
     warnings: result.warnings,
   };
+}
+
+/** The request's body as text; an AtlasError past MAX_BODY. */
+async function body(request: IncomingMessage): Promise<string> {
+  let text = '';
+  for await (const chunk of request) {
+    text += chunk;
+    if (text.length > MAX_BODY) throw new AtlasError('Too many skills to group at once');
+  }
+  return text;
+}
+
+/** `{ skills: [{ path, name, description }] }`, with unique paths; an AtlasError otherwise. */
+function parseGroupRequest(text: string): GroupedSkill[] {
+  const skills = (JSON.parse(text) as { skills?: unknown })?.skills;
+  const valid =
+    Array.isArray(skills) &&
+    skills.every(
+      (skill) => typeof skill?.path === 'string' && typeof skill.name === 'string' && typeof skill.description === 'string',
+    );
+  if (!valid) throw new AtlasError('Send { skills: [{ path, name, description }] }');
+  if (skills.length < 2) throw new AtlasError('Group two skills or more');
+  if (skills.length > MAX_SKILLS) throw new AtlasError('Too many skills to group at once');
+  if (new Set(skills.map((skill) => skill.path)).size !== skills.length) throw new AtlasError('Each skill once');
+  return skills.map(({ path, name, description }) => ({ path, name, description }));
 }
 
 function isLocalHost(host: string | undefined): boolean {

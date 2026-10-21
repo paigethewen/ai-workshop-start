@@ -9,6 +9,10 @@ let current;
 let organization;
 /** The filter's words, marked in the list and in the open skill. */
 let words = [];
+/** The groups the model made of the listed skills, or undefined for one plain list. */
+let groups;
+/** Counts requests for groups, so that an answer for a list since changed is dropped. */
+let asked = 0;
 
 /** The agent behind each agent folder, for the badges. */
 const AGENTS = {
@@ -27,6 +31,7 @@ for (const chip of document.querySelectorAll('[data-repo]')) {
   });
 }
 $('filter').addEventListener('input', filter);
+$('group').addEventListener('click', group);
 $('copy').addEventListener('click', copySource);
 window.addEventListener('popstate', fromAddress);
 window.addEventListener('hashchange', () => current?.skills && show(location.hash.slice(1)));
@@ -117,18 +122,7 @@ function render() {
   $('summary').textContent = `${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`;
   $('filter').value = '';
   words = [];
-  $('skills').replaceChildren(
-    ...skills.map((skill) => {
-      const item = document.createElement('li');
-      const link = document.createElement('a');
-      link.href = `#${encodeURIComponent(skill.path)}`;
-      link.dataset.path = skill.path;
-      fillItem(link, skill);
-      item.append(link);
-      return item;
-    }),
-  );
-  $('no-match').hidden = true;
+  ungroup();
   folded($('warnings'), warnings);
   $('no-skills').hidden = skills.length > 0;
   screen('results');
@@ -214,19 +208,86 @@ function badges(skill) {
   return group;
 }
 
+/** A new filter lists other skills: their groups, if any, are the model's to make again. */
 function filter() {
   words = wordsIn($('filter').value);
-  let shown = 0;
-  const links = $('skills').querySelectorAll('a');
-  current.skills.forEach((skill, index) => {
-    const match = matches(skill, words);
-    links[index].parentElement.hidden = !match;
-    if (!match) return;
-    fillItem(links[index], skill);
-    shown++;
-  });
-  $('no-match').hidden = shown > 0 || current.skills.length === 0;
+  ungroup();
   if (current.open) fillSkill(current.open);
+}
+
+/** The skills that match the filter, under the model's groups once it made them. */
+function list() {
+  const shown = current.skills.filter((skill) => matches(skill, words));
+  const items = (skills) =>
+    skills.map((skill) => {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = `#${encodeURIComponent(skill.path)}`;
+      link.dataset.path = skill.path;
+      link.toggleAttribute('aria-current', skill === current.open);
+      fillItem(link, skill);
+      item.append(link);
+      return item;
+    });
+  const byPath = new Map(shown.map((skill) => [skill.path, skill]));
+  $('skills').replaceChildren(
+    ...(!groups
+      ? items(shown)
+      : groups.map((group) => {
+          const item = element('li', 'group', '');
+          const head = element('h3', 'group-head', '');
+          head.append(element('span', '', group.label), element('span', 'count', String(group.paths.length)));
+          const skills = element('ul', 'skill-list', '');
+          skills.append(...items(group.paths.map((path) => byPath.get(path))));
+          item.append(head, skills);
+          return item;
+        })),
+  );
+  $('no-match').hidden = shown.length > 0 || current.skills.length === 0;
+  $('group').hidden = shown.length < 2;
+  $('group-note').hidden = shown.length < 2 || !!groups;
+}
+
+/** Back to one plain list; an answer still on its way is dropped. */
+function ungroup() {
+  asked++;
+  groups = undefined;
+  $('group').disabled = false;
+  $('group').textContent = 'Group with Claude';
+  $('group-problem').hidden = true;
+  list();
+}
+
+/** Asks the model for groups of the listed skills; a failure is shown under the button, the list is kept. */
+async function group() {
+  if (groups) return ungroup();
+  const request = ++asked;
+  const skills = current.skills.filter((skill) => matches(skill, words)).map(({ path, name, description }) => ({ path, name, description }));
+  $('group').disabled = true;
+  $('group').textContent = 'Grouping…';
+  $('group-problem').hidden = true;
+  let body;
+  try {
+    const response = await fetch('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skills }),
+    });
+    body = await response.json();
+    if (!response.ok) throw new Error(body.error);
+  } catch (error) {
+    if (request !== asked) return;
+    $('group').disabled = false;
+    $('group').textContent = 'Group with Claude';
+    $('group-problem').textContent = error.message;
+    $('group-problem').hidden = false;
+    return;
+  }
+  if (request !== asked) return;
+  groups = body.groups;
+  $('group').disabled = false;
+  $('group').textContent = 'Ungroup';
+  list();
 }
 
 function view(name) {

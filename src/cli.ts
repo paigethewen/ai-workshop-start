@@ -4,6 +4,7 @@
 import { run } from './commands.ts';
 import { openGitHub, openGitHubOrganization, parseGitHubOwner, parseGitHubUrl } from './core/github.ts';
 import { openDirectory } from './local.ts';
+import { askClaude } from './web/groups.ts';
 import { createWebServer, listen } from './web/server.ts';
 
 const token = process.env.GITHUB_TOKEN || undefined;
@@ -16,5 +17,5 @@ process.exitCode = await run(process.argv.slice(2), {
   print: (text) => console.log(text),
   error: (text) => console.error(text),
   // The server keeps the process running until Ctrl+C.
-  serve: (port) => listen(createWebServer({ open, openOrganization }), port),
+  serve: (port) => listen(createWebServer({ open, openOrganization, ask: askClaude() }), port),
 });

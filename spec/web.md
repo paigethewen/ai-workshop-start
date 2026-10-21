@@ -2,7 +2,7 @@
 `./skill-atlas serve [--port <port>]`: a local page over the same scan, at `http://127.0.0.1:4173/` by default.
 Enter a GitHub URL or a directory; the page lists every unique skill, and opens each one's `SKILL.md`.
 Enter `https://github.com/<owner>`: the page lists the organization's repositories with skills, as `scan` does.
-`GITHUB_TOKEN`, as for `scan`. *Nothing is stored*: each scan is one request, its answer is all there is.
+`GITHUB_TOKEN`, as for `scan`. *Nothing is stored*: each scan is one request, its answer is all there is. Only *Group with Claude* sends what was scanned anywhere.
 ## The page
 - Before a scan: what Skill Atlas does, and example repositories to scan with one click
 - While scanning, the button spins; a failed scan → its message in place of the results
@@ -15,6 +15,14 @@ Enter `https://github.com/<owner>`: the page lists the organization's repositori
 - Each word typed is marked where the list shows it; a skill that matches outside its name and first sentence shows the first line of its `SKILL.md` that does
 - No skills → a note on where skills live
 - An unreachable repository → its `scan` message on the page
+## Grouping with a model
+`Group with Claude` sorts the skills the list shows, two or more, into groups by topic, with Claude Haiku through the `claude` CLI on this machine, logged in as its user. *The skills' names, descriptions and paths leave the machine*, and nothing else; the button says so.
+- `claude -p --model haiku` with no tools, no MCP servers and no skills, its answer held to a JSON schema: a `SKILL.md` can ask anything of the model, the model can only answer
+- The answer is **checked, never repaired**: every skill in exactly one group, no skill it was not given; otherwise its fault is shown under the button and the list stays as it was
+- Each group: its label and `N`, then its skills, in the model's order; `Ungroup` → the plain list
+- Typing in the filter or a new scan → the plain list; an answer for a list since changed is dropped
+- No `claude` → `Grouping with a model needs the claude CLI, installed and logged in`; no answer within 90 seconds → so
+- `POST /api/groups`, `{ skills: [{ path, name, description }] }` as `application/json` only, so another site's page cannot spend the model; at most 1000 skills
 ## An organization
 - The **same repositories** as `scan https://github.com/<owner>`: the same counts, order and warnings; forks skipped
 - `<owner> · N of M repositories with skills`; the warnings, folded, above it
