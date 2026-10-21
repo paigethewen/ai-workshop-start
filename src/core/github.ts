@@ -50,17 +50,19 @@ export async function openGitHub(input: string, options: GitHubOptions): Promise
 export async function openGitHubOrganization(input: string, options: GitHubOptions): Promise<Organization> {
   const owner = parseGitHubOwner(input);
   if (!owner) throw new AtlasError(`Not a GitHub organization URL: ${input}`);
-  const github = client(options);
-  const { login } = await github.json<{ login: string }>(
+  // One pace for every repository's requests: they are all counted against the same limit.
+  const paced = { ...options, pace: pace() };
+  const github = client(paced);
+  const { login, public_repos: count = 0 } = await github.json<{ login: string; public_repos?: number }>(
     `${API}/users/${owner}`,
     `Organization or user not found: https://github.com/${owner}`,
   );
-  const listed: { full_name: string; default_branch: string; fork: boolean }[] = [];
-  for (let page = 1; ; page++) {
-    const repositories = await github.json<typeof listed>(`${API}/users/${login}/repos?per_page=100&page=${page}`);
-    listed.push(...repositories);
-    if (repositories.length < 100) break;
-  }
+  type Listed = { full_name: string; default_branch: string; fork: boolean };
+  const page = (number: number) => github.json<Listed[]>(`${API}/users/${login}/repos?per_page=100&page=${number}`);
+  // The pages the count says are asked for at once; past them, while the last one is full, as a count lags.
+  const pages = Math.max(1, Math.ceil(count / 100));
+  const listed = (await Promise.all(Array.from({ length: pages }, (_, index) => page(index + 1)))).flat();
+  for (let number = pages + 1; listed.length === (number - 1) * 100; number++) listed.push(...(await page(number)));
   return {
     id: login,
     repositories: listed
@@ -68,7 +70,7 @@ export async function openGitHubOrganization(input: string, options: GitHubOptio
       .map(({ full_name: id, default_branch: branch }) => ({
         id,
         // A client of its own: the answers it keeps go with the repository once it is scanned.
-        open: () => openCommit(client(options), id, branch, 'scan this repository alone, with GITHUB_TOKEN, to search everywhere'),
+        open: () => openCommit(client(paced), id, branch, 'scan this repository alone, with GITHUB_TOKEN, to search everywhere'),
       })),
   };
 }
@@ -116,14 +118,16 @@ async function treePaths(github: Client, id: string, sha: string, warnings: stri
   warnings.push(
     `the tree is too large to list at once; looked only in ${SKILL_ROOTS.join(', ')} at the root, so nested ones were skipped (${hint})`,
   );
-  const paths: string[] = [];
-  for (const root of SKILL_ROOTS) {
-    const rootSha = await directory(github, id, sha, root);
-    if (!rootSha) continue;
-    const subtree = await github.json<Tree>(`${API}/repos/${id}/git/trees/${rootSha}?recursive=1`);
-    paths.push(...files(subtree).map((path) => `${root}/${path}`));
-  }
-  return paths;
+  // Every root at once: the trees they share on the way down are asked for once.
+  const roots = await Promise.all(
+    SKILL_ROOTS.map(async (root) => {
+      const rootSha = await directory(github, id, sha, root);
+      if (!rootSha) return [];
+      const subtree = await github.json<Tree>(`${API}/repos/${id}/git/trees/${rootSha}?recursive=1`);
+      return files(subtree).map((path) => `${root}/${path}`);
+    }),
+  );
+  return roots.flat();
 }
 
 /** Walks down one level at a time; the directory's tree, or undefined if it does not exist. */
@@ -145,7 +149,7 @@ function files(tree: Tree): string[] {
 
 type Client = ReturnType<typeof client>;
 
-function client({ fetch, token }: GitHubOptions) {
+function client({ fetch, token, pace }: GitHubOptions & { pace?: Pace }) {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   const answers = new Map<string, Promise<unknown>>(); // the root tree is asked for once per skill root
@@ -160,6 +164,7 @@ function client({ fetch, token }: GitHubOptions) {
 
   async function request(url: string, notFound: string): Promise<unknown> {
     for (let attempt = 0; ; attempt++) {
+      await pace?.turn();
       const response = await get(url, { headers });
       if (response.ok) return response.json();
       const body: unknown = await response.json().catch(() => undefined);
@@ -170,7 +175,9 @@ function client({ fetch, token }: GitHubOptions) {
         // A short secondary limit, as code search gives shared runners, passes in seconds.
         const wait = retryAfter(response, text);
         if (wait !== undefined && wait <= MAX_RETRY_WAIT && attempt < MAX_RETRIES) {
-          await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+          // Paced, every request waits: the others would only be limited too.
+          if (pace) pace.pause(wait);
+          else await sleep(wait * 1000);
           continue;
         }
         if (wait !== undefined || /rate limit/i.test(text)) {
@@ -205,6 +212,53 @@ function client({ fetch, token }: GitHubOptions) {
 /** Retries of a rate-limited request, each after at most this many seconds. */
 const MAX_RETRIES = 3;
 const MAX_RETRY_WAIT = 10;
+
+/**
+ * API requests an organization scan may start at once, then each second: under GitHub's secondary
+ * limit of 900 a minute, which many repositories scanned at the same time would otherwise pass.
+ */
+const BURST = 60;
+const PER_SECOND = 14;
+
+type Pace = ReturnType<typeof pace>;
+
+/** Turns for API requests, one at a time, as BURST and PER_SECOND allow and no sooner than a pause GitHub asked for ends. */
+function pace() {
+  let tokens = BURST;
+  let filled = Date.now();
+  let resume = 0;
+  let queue = Promise.resolve();
+  async function wait() {
+    for (;;) {
+      const now = Date.now();
+      if (now < resume) {
+        await sleep(resume - now);
+        continue;
+      }
+      tokens = Math.min(BURST, tokens + ((now - filled) * PER_SECOND) / 1000);
+      filled = now;
+      if (tokens >= 1) {
+        tokens--;
+        return;
+      }
+      await sleep(((1 - tokens) * 1000) / PER_SECOND);
+    }
+  }
+  return {
+    turn(): Promise<void> {
+      queue = queue.then(wait);
+      return queue;
+    },
+    /** Holds every turn for this many seconds from now. */
+    pause(seconds: number) {
+      resume = Math.max(resume, Date.now() + seconds * 1000);
+    },
+  };
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 /** Seconds GitHub asks to wait: the Retry-After header, else "try again in 4.1s" in the message. */
 function retryAfter(response: Response, text: string): number | undefined {

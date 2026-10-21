@@ -30,6 +30,10 @@ anthropics/cwc-workshops · 8 skills
 - **Forks are skipped**, neither scanned nor counted: their skills are their upstream's
 - Each repository is listed from its tree at its default branch, even with `GITHUB_TOKEN`: code search's limit is too low for many repositories
   - A truncated tree warns as for one repository; the hint is to scan that repository alone
+- Each repository is two GitHub API requests, its commit and its tree, besides reading its skills; the listing is one a page of 100
+- Many repositories are scanned at once, their API requests paced under GitHub's limit of 900 a minute: 60 at once, then 14 a second
+  - A short pause GitHub asks for holds every repository's requests, not only the one it answered
+- The pages of the listing are asked for at once, as many as the owner's repository count says; past them, while the last page is full
 - Warnings name their repository: `warning: <owner>/<repo>: <warning>`, to *stderr*
 - A repository that cannot be scanned, such as an empty one → a warning, the scan goes on; it counts as one without skills
 - A rate limit, a rejected token or GitHub out of reach stops the whole scan: the message, exit code 1

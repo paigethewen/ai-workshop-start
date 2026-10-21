@@ -28,7 +28,7 @@ function trim(url: string, body: any): unknown {
     return { truncated: body.truncated, tree: body.tree.filter(kept).map(({ path, mode, type, sha }: any) => ({ path, mode, type, sha })) };
   }
   if (url.includes('/commits/')) return { sha: body.sha };
-  if (url.includes('/users/')) return { login: body.login };
+  if (url.includes('/users/')) return { login: body.login, public_repos: body.public_repos };
   if (body.full_name) return { full_name: body.full_name, default_branch: body.default_branch };
   return body;
 }

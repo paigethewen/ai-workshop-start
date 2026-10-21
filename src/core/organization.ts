@@ -14,8 +14,8 @@ export type OrganizationResult = {
   warnings: string[];
 };
 
-/** Repositories scanned at the same time: each is a few requests, and GitHub limits bursts. */
-const AT_ONCE = 4;
+/** Repositories scanned at the same time: each waits on GitHub more than it works, and GitHub paces their requests. */
+const AT_ONCE = 16;
 
 /** Every repository, scanned as one; a repository that cannot be scanned is a warning, unless GitHub is unavailable. */
 export async function scanOrganization(organization: Organization): Promise<OrganizationResult> {
