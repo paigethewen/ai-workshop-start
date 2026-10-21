@@ -198,9 +198,8 @@ function render() {
   folded($('warnings'), warnings);
   $('no-skills').hidden = skills.length > 0;
   screen('results');
-  // A new scan starts from its first skill.
-  history.replaceState(null, '', location.search);
-  show('');
+  // A new scan's address has no #<path>, so it opens its first skill; a reload or a shared link, the one in it.
+  show(location.hash.slice(1));
 }
 
 /** The warnings, folded under their count; hidden when there are none. */
