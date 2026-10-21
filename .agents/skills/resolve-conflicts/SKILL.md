@@ -34,6 +34,7 @@ When address-comment sent you here, it holds the claim already: skip this step a
 Every comment this skill posts ends with a hidden marker naming the `main` it merged or gave up on, `<!-- resolve-conflicts: <main-sha> -->`.
 Read `main`'s sha with `git rev-parse origin/main` after `git fetch origin`.
 Stop, and release the claim, when the pull request no longer conflicts (another run resolved it while you waited), or when a trusted comment (as [address-comment](../address-comment/SKILL.md) step 3 defines trusted) already carries the marker for this sha: that `main` was tried already.
+Go on despite that marker when trusted feedback was posted after it, an inline comment, conversation comment or review body that is not either skill's own (address-comment step 3): it may be a person's answer to a hand-off (step 6), which only a new merge applies.
 When address-comment sent you here, every "stop" in steps 3 and 6 means return to it: it goes on with the review feedback either way.
 
 ## 4. Merge main
@@ -60,6 +61,7 @@ git log -p "$(git merge-base HEAD origin/main)..origin/main" -- <file>
 ## 5. Resolve each conflict
 
 Keep both sides' intent; picking one side's hunk, `-X ours` or `-X theirs`, silently drops the other side's work.
+A conflict handed to a human before (step 6) is theirs to decide: read each earlier hand-off on the pull request, the comments carrying the marker, and the trusted feedback posted after it, and resolve a conflict a person answered as they decided, instead of handing it over again.
 
 - code: combine both changes; when `main` renamed or reshaped what the branch uses, adapt the branch's code to the new shape
 - [spec/](../../../spec/): keep both sides' rules, one line each; two rules that contradict each other are a decision, step 6
@@ -73,6 +75,7 @@ Leave no conflict markers: `git diff --check` and `grep -rn '^<<<<<<<\|^>>>>>>>'
 
 When a conflict needs a decision, both sides changing one behavior in different ways, `main` already doing what the branch was for, or a baseline: do not guess.
 Abort the merge, `git merge --abort`, and comment once on the pull request: each conflicted file, what each side meant there, the options, and your recommendation, ending with the marker.
+If a hand-off for this sha is already on the pull request and no answer settles it, abort and comment nothing new: the question is still open.
 Push nothing, release the claim, and stop. A person answers as review feedback, which [address-comment](../address-comment/SKILL.md) handles, or resolves it themselves.
 
 ## 7. Verify
