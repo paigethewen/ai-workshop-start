@@ -13,6 +13,8 @@ export type Context = {
   print(text: string): void;
   /** Errors and warnings. */
   error(text: string): void;
+  /** A line the next one replaces, '' to clear it; only where it can be rewritten in place, such as a terminal. */
+  progress?(text: string): void;
   /** Starts the web view on the port and returns its URL; only the Node CLI can. */
   serve?(port: number): Promise<string>;
 };
@@ -47,7 +49,15 @@ async function scanCommand(args: string[], context: Context) {
   if (args.length !== 1) throw new AtlasError('Usage: skill-atlas scan <GitHub URL | directory>');
   const organization = context.openOrganization?.(args[0]);
   if (organization) {
-    const result = await scanOrganization(await organization);
+    const opened = await organization;
+    let result: OrganizationResult;
+    try {
+      result = await scanOrganization(opened, ({ scanned, total }) =>
+        context.progress?.(`Scanning ${opened.id}: ${scanned} of ${count(total, 'repository', 'repositories')}`),
+      );
+    } finally {
+      context.progress?.('');
+    }
     printOrganization(result, context);
     for (const warning of result.warnings) context.error(`warning: ${warning}`);
     return;

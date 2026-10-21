@@ -14,7 +14,7 @@ build-tools-bump-gradle-api — Bumps the Gradle API version that Kotlin Gradle 
 ```
 
 A whole organization or user, `./skill-atlas scan https://github.com/<owner>`, counts the skills in each of its
-repositories, forks aside:
+repositories, forks aside, 8 at a time; on a terminal, `Scanning <owner>: N of M repositories` shows how far it is:
 
 ```console
 $ ./skill-atlas scan https://github.com/anthropics
