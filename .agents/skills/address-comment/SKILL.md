@@ -53,7 +53,7 @@ A reviewer bot's findings count as much as a human's.
 
 Every reply this skill posts carries a hidden marker naming the feedback it handled, `<!-- address-comment: inline-<id> -->`, `issue-<id>` or `review-<id>`.
 Feedback is handled when its marker appears in a trusted comment on the pull request; a marker from anyone else does not count. Skip handled feedback, and skip every comment that contains `<!-- address-comment` or `<!-- resolve-conflicts`: those are this skill's own replies and [resolve-conflicts](../resolve-conflicts/SKILL.md)' comments, never feedback, even when one recommends a change.
-If nothing is left, release the claim and stop.
+If nothing is left, check whether the pull request conflicts with `main`, as [resolve-conflicts](../resolve-conflicts/SKILL.md) step 1 asks GitHub: when it does, go on to step 4 for the conflict alone, since a review that only nudges (a `<!-- resolve-conflicts: request` marker) is how that conflict reaches a run that can push. Otherwise release the claim and stop.
 
 ## 4. Decide each item
 

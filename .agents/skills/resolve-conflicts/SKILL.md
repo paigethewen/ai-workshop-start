@@ -1,12 +1,18 @@
 ---
 name: resolve-conflicts
-description: Resolve merge conflicts between main and a pull request opened by issue-to-pr, by merging main into its branch. Use when run by the resolve-conflicts automation after a push to main or on its schedule, when address-comment finds its pull request conflicting, or when asked to resolve a pull request's conflicts.
+description: Resolve merge conflicts between main and a pull request opened by issue-to-pr, by merging main into its branch. Use when run by a resolve-conflicts automation (on a push to main or a schedule to find conflicting pull requests, or on a pull request to resolve its conflict), when address-comment finds its pull request conflicting, or when asked to resolve a pull request's conflicts.
 ---
 
 # Resolve conflicts
 
 A pull request opened by [issue-to-pr](../issue-to-pr/SKILL.md) that conflicts with `main` is yours to bring up to date: merge `main` into its branch, resolve each conflict by what both sides meant, verify, and push.
-The resolve-conflicts automation starts a run on every push to `main`, the merge that may have put other pull requests in conflict, and on a schedule to catch what a run missed.
+A run can push only to the branch it checked out, so the work is split between two kinds of run:
+
+- a detecting run, started by a push to `main`, the merge that may have put other pull requests in conflict, or by a schedule that catches what a run missed. It checks out `main` and pushes nothing, "No code changes": it finds conflicting pull requests and nudges each one (step 1), and stops
+- a resolving run, started on one pull request, by its own automation on the pull request opened or updated, or by [address-comment](../address-comment/SKILL.md) after a review, with "Push to source branch": it merges and pushes (steps 2 to 9)
+
+A run started by a push to `main` or a schedule detects; a run started on a pull request, or asked by a person who can push to its branch, resolves.
+A detecting run never merges, and never leaves a patch for a person to apply: the resolving run the nudge starts does the merge where it can push.
 Resolve only what both sides' intent settles; a conflict that needs a decision goes to a human, never to a guess.
 
 ## 1. Pick the pull requests
@@ -23,6 +29,16 @@ gh pr view <number> --json mergeable,mergeStateStatus --jq '.mergeable'
 GitHub computes this lazily, so `UNKNOWN` is a normal first answer: ask again every 10 seconds, up to a minute.
 Go on only with `CONFLICTING`; skip `MERGEABLE`, and skip a pull request still `UNKNOWN` after a minute: the schedule comes back to it.
 
+A resolving run goes on to step 2. A detecting run nudges each conflicting pull request instead, with a review whose body is only a marker naming `main`'s sha (step 3), since a submitted review starts the address-comment automation, which can push:
+
+```bash
+gh api -X POST repos/{owner}/{repo}/pulls/<number>/reviews -f event=COMMENT -f body='<!-- resolve-conflicts: request <main-sha> -->'
+```
+
+Nudge once per `main`: skip a pull request that already carries a request or a `<!-- resolve-conflicts: <main-sha> -->` marker for this sha from a trusted author.
+The nudge carries no instruction, only the event: the run it starts reads the conflict from GitHub, so who posted it does not matter.
+Then stop: no claim, no checkout of the branch, no merge.
+
 ## 2. Claim the pull request
 
 Claim it with the 👀 reaction exactly as [address-comment](../address-comment/SKILL.md) step 2 does: the same lock, so this skill and address-comment never push to one branch at once.
@@ -31,7 +47,7 @@ When address-comment sent you here, it holds the claim already: skip this step a
 
 ## 3. Skip what is handled
 
-Every comment this skill posts ends with a hidden marker naming the `main` it merged or gave up on, `<!-- resolve-conflicts: <main-sha> -->`.
+Every comment a resolving run posts ends with a hidden marker naming the `main` it merged or gave up on, `<!-- resolve-conflicts: <main-sha> -->`; a nudge's `request` marker (step 1) is not one, and does not count here.
 Read `main`'s sha with `git rev-parse origin/main` after `git fetch origin`.
 Stop, and release the claim, when the pull request no longer conflicts (another run resolved it while you waited), or when a trusted comment (as [address-comment](../address-comment/SKILL.md) step 3 defines trusted) already carries the marker for this sha: that `main` was tried already.
 Go on despite that marker when trusted feedback was posted after it, an inline comment, conversation comment or review body that is not either skill's own (address-comment step 3): it may be a person's answer to a hand-off (step 6), which only a new merge applies.
