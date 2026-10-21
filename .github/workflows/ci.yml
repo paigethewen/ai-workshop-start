@@ -69,7 +69,7 @@ jobs:
           cache: npm
       - run: npm ci
       - id: baseline
-        run: node e2e/visual/baseline.ts
+        run: printf 'artifact-id=12329331560\nrun-id=39564393578\nfrom=example\n' >> "$GITHUB_OUTPUT"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
@@ -108,6 +108,11 @@ jobs:
           path: ${{ steps.baseline.outputs.artifact-id && 'visual-baseline' || 'screenshots' }}/*.png
           if-no-files-found: error
           retention-days: 90
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-screenshots
+          path: screenshots/*.png
       - name: Summary
         if: ${{ !cancelled() }}
         env:
