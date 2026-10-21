@@ -10,16 +10,19 @@ The automation that runs this skill names the Slack channels; post the same mess
 
 ## 1. Collect
 
-The window is the 3 hours before now, in UTC; a run asked for another window ("since Monday", "today") uses that one instead.
+The window is the 3 whole hours before the current hour, in UTC: a run that starts at 12:04 or 12:40 covers 09:00 to 12:00.
+The automation runs on the hour, every 3 hours, so consecutive windows meet: nothing is missed and nothing is reported twice, however late a run starts within its hour.
+A run asked for another window ("since Monday", "today") uses that one instead.
 
 ```bash
-since=$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+until=$(date -u +%Y-%m-%dT%H:00:00Z)
+since=$(date -u -d "$until - 3 hours" +%Y-%m-%dT%H:%M:%SZ)
+last=$(date -u -d "$until - 1 second" +%Y-%m-%dT%H:%M:%SZ)  # ranges include both ends
 
-gh pr list --state merged --search "merged:>=$since" --limit 100 \
+gh pr list --state merged --search "merged:$since..$last" --limit 100 \
   --json number,title,url,author,mergedAt,labels,closingIssuesReferences
 
-gh issue list --state closed --search "closed:>=$since reason:completed" --limit 100 \
+gh issue list --state closed --search "closed:$since..$last reason:completed" --limit 100 \
   --json number,title,url,author,closedAt,labels
 ```
 
@@ -29,7 +32,7 @@ Keep a closed issue only when it was solved, closed as completed, not as not pla
 - labeled `bug`, whoever filed it, or
 - filed by a person: `author.is_bot` is false and the login does not end in `[bot]`
 
-Drop the rest. An issue a merged pull request closes is listed once, under the issue, with the pull request's number beside it; the pull request is not listed again.
+Drop the rest. An issue a merged pull request closes is listed once, under the issue, with the pull request's number beside it; the pull request is not listed again under *Merged*, but still counts in the headline.
 
 If nothing is left, post nothing and stop: an empty update is noise.
 
@@ -42,12 +45,11 @@ The headline counts what shipped; name what matters most in a few words if one i
 
 ```
 :rocket: *Skill Atlas · 09:00–12:00 UTC*
-3 PRs merged · 2 issues solved
+4 PRs merged · 2 issues solved
 
 *Merged*
 :sparkles: <https://github.com/o/r/pull/22|#22> Tidy the web view: first skill on scan · _@paigethewen_
-:wrench: <https://github.com/o/r/pull/21|#21> Fix the filter losing the open skill · _@paigethewen_
-:books: <https://github.com/o/r/pull/19|#19> Fix CI · _@paigethewen_
+:gear: <https://github.com/o/r/pull/19|#19> Fix CI · _@paigethewen_
 
 *Solved*
 :bug: <https://github.com/o/r/issues/18|#18> Copy button copies the wrong file · via #21
