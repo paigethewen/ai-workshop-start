@@ -14,6 +14,7 @@ Read the issue, every comment, and every linked issue and pull request with thei
 Then read [AGENTS.md](../../../AGENTS.md) and the [spec](../../../spec/): the spec is the contract the change must fit.
 
 State the problem in one sentence, and the observable behavior that will mean it is solved.
+If an open pull request already closes the issue, it is another run's: stop. An issue filed by [red-agent](../red-agent/SKILL.md) is fixed by the run that filed it.
 If the issue is already fixed, a duplicate, or contradicts the spec, comment why on the issue with the evidence, and stop: no pull request.
 If a decision only the author can make blocks the work (two valid behaviors, the spec silent), comment one focused question with the options and your recommendation, and stop.
 Otherwise make reasonable calls yourself and record them in the pull request description.
