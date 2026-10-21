@@ -9,7 +9,7 @@ A pull request with a product-changing feature or fix links a demo video of it, 
 Never commit binaries, videos included, to a branch; the screenshots' baselines are the one exception, and only a person changes them, with the `accept-screenshots` label.
 ## Definition of done
 - All tests pass locally
-- CI is green: [the CI workflow](.github/workflows/ci.yml) passes on the pushed branch or pull request
+- CI is green: [the CI workflow](.github/workflows/ci.yml) passes on the pull request; CI runs for a branch only once it has one
 
 ## Commands
 - `npm ci`: first, in a fresh checkout

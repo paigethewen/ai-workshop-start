@@ -9,7 +9,7 @@ A pull request that changes the product, a feature or a fix that changes what a 
 Everything else gets no video: docs, specs, tests, CI, agent skills and automations, dependencies, and refactors that change no behavior.
 A product change the web view does not show (the CLI alone) shows its console output in the pull request body instead.
 
-The demo cases are the web tests, [demo.spec.ts](../../../e2e/web/demo.spec.ts): [CI](../../../.github/workflows/ci.yml)'s `web` job runs them on every push, records each one as a video, and uploads the videos as the run's `web-videos` artifact.
+The demo cases are the web tests, [demo.spec.ts](../../../e2e/web/demo.spec.ts): [CI](../../../.github/workflows/ci.yml)'s `web` job runs them on every push to a pull request, records each one as a video, and uploads the videos as the run's `web-videos` artifact.
 Each case's key moments are screenshots, compared to the pixel with the baselines in [e2e/web/screenshots](../../../e2e/web/screenshots/).
 Every run is the same: the tests run in the image of [the Dockerfile](../../../e2e/web/Dockerfile), the same Linux, Chromium and fonts here and on CI, at 1280×800, with GitHub answering from [github.json](../../../e2e/web/github.json), without the network.
 Never commit a video, or any binary but the baselines, and never a baseline yourself.
