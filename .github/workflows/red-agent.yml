@@ -1,0 +1,49 @@
+# The red agent: on every push to main, Claude Code hunts for a real bug in what was just merged, files one
+# issue per bug with its steps and video, and opens a pull request that fixes it, as the red-agent skill says.
+# Needs ANTHROPIC_API_KEY, and RED_AGENT_TOKEN, a token that may push, open issues and pull requests: a pull
+# request opened with the workflow's own token starts no CI.
+name: Red agent
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  packages: read
+  actions: read
+# One hunt at a time, never cancelled: a cancelled one would leave an issue without its fix. Pushes while one
+# runs fold into one more run, on the newest main.
+concurrency:
+  group: red-agent
+  cancel-in-progress: false
+jobs:
+  hunt:
+    # A fork has no secrets, and main is this repository's.
+    if: github.repository_owner == 'paigethewen'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RED_AGENT_TOKEN || github.token }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The web tests' image, to record the bug's video as CI records the demo cases.
+      - run: echo "${{ github.token }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.RED_AGENT_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.RED_AGENT_TOKEN || github.token }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.RED_AGENT_TOKEN || github.token }}
+          claude_args: --model claude-opus-5-5 --permission-mode bypassPermissions
+          prompt: |
+            Follow .agents/skills/red-agent/SKILL.md, end to end, on ${{ github.repository }} at ${{ github.sha }}.
+            Hunt first where this push changed: ${{ github.event.before }}..${{ github.sha }}.
