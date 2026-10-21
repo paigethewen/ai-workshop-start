@@ -100,3 +100,20 @@ test('scan-organization: scan the modelcontextprotocol organization, open one of
   await moment(page, 'scan-organization-3-back');
   await pause(page, 3000);
 });
+
+test('reload-skill: scan ./fixture, open test-runner, and reload: the same skill is open, its #<path> kept', async ({ page }) => {
+  await scan(page, './fixture');
+  await shown(page, '#skills a');
+  await pause(page);
+  await page.locator('#skills a', { hasText: 'test-runner' }).click();
+  await expect(page.locator('#skill-name')).toHaveText('test-runner');
+  await expect(page).toHaveURL(/\?repo=\.%2Ffixture#\.claude%2Fskills%2Ftest-runner%2FSKILL\.md$/);
+  await moment(page, 'reload-skill-1-open');
+  await pause(page, 3000);
+  await page.reload();
+  await shown(page, '#skills a');
+  await expect(page.locator('#skill-name')).toHaveText('test-runner');
+  await expect(page).toHaveURL(/\?repo=\.%2Ffixture#\.claude%2Fskills%2Ftest-runner%2FSKILL\.md$/);
+  await moment(page, 'reload-skill-2-reloaded');
+  await pause(page, 3000);
+});
