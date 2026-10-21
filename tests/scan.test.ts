@@ -161,16 +161,17 @@ test('./fixture warns only about the malformed skill, the differing copies and t
   assert.ok(warnings().some((line) => /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /.test(line)));
 });
 
-test('this repository has only its own address-comment, code-review, demo-video, issue-to-pr, red-agent and resolve-conflicts skills: fixture/ is test data, so the count is 6 and the exit code 0', async () => {
+test('this repository has only its own address-comment, code-review, demo-video, issue-to-pr, red-agent, resolve-conflicts and status-update skills: fixture/ is test data, so the count is 7 and the exit code 0', async () => {
   const scanned = await atlas(['scan', REPOSITORY]);
   assert.equal(scanned.code, 0, scanned.stderr);
-  assert.match(scanned.stdout, /^\S+ · 6 skills$/m);
+  assert.match(scanned.stdout, /^\S+ · 7 skills$/m);
   assert.match(scanned.stdout, /^address-comment — /m);
   assert.match(scanned.stdout, /^code-review — /m);
   assert.match(scanned.stdout, /^demo-video — /m);
   assert.match(scanned.stdout, /^issue-to-pr — /m);
   assert.match(scanned.stdout, /^red-agent — /m);
   assert.match(scanned.stdout, /^resolve-conflicts — /m);
+  assert.match(scanned.stdout, /^status-update — /m);
 });
 
 test('a truncated GitHub tree without GITHUB_TOKEN finds root-level agent folders and warns that nested ones were skipped', async () => {
