@@ -1,8 +1,10 @@
-# CI for your Skill Atlas repository: the typecheck, the tests and the CLI itself, on every push
-# and pull request, on a clean machine. A pull request is ready when this is green.
+# CI for your Skill Atlas repository: the typecheck, the tests and the CLI itself, on every pull request
+# and every push to main, on a clean machine. A pull request is ready when this is green.
 name: CI
 on:
+  # A branch's pushes run on its pull request: a run for the push too would test the same commit twice.
   push:
+    branches: [main]
   pull_request:
   # The Screenshots workflow runs CI again on the baselines it commits: its own push does not.
   workflow_dispatch:
@@ -33,8 +35,40 @@ jobs:
           for i in $(seq 20); do curl -sf http://127.0.0.1:4173/ >/dev/null && break; sleep 0.5; done
           curl -sf 'http://127.0.0.1:4173/api/scan?repo=./fixture' | grep -q '"id":"fixture"'
           kill $server
-  # The real CLI against real JetBrains repositories on live GitHub, pinned to commits.
+  # Whether the pull request changes what the live end-to-end tests run: the CLI, the core, those tests,
+  # the dependencies or this workflow. Every other event runs them, and so does a diff that cannot be read.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scan: ${{ steps.diff.outputs.scan }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "scan=true" >> "$GITHUB_OUTPUT"
+          elif ! changed=$(git diff --name-only "$BASE...$HEAD"); then
+            echo "::warning::Cannot list the pull request's changes: running the live end-to-end tests"
+            echo "scan=true" >> "$GITHUB_OUTPUT"
+          elif grep -qE '^(src/[^/]+\.ts|src/core/|e2e/github\.test\.ts|package(-lock)?\.json|\.github/workflows/ci\.yml)' <<< "$changed"; then
+            echo "scan=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No change to the CLI, the core, the end-to-end tests or the dependencies: the live end-to-end tests are skipped"
+            echo "scan=false" >> "$GITHUB_OUTPUT"
+          fi
+  # The real CLI against real JetBrains repositories on live GitHub, pinned to commits: on main, and on the
+  # pull requests that change what it runs, so live GitHub fails no other change.
   e2e:
+    needs: scope
+    if: needs.scope.outputs.scan == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -114,7 +148,7 @@ jobs:
           node e2e/web/report.ts > screenshots.md
           cat screenshots.md >> "$GITHUB_STEP_SUMMARY"
           # On the pull request, one comment, kept up to date: posted when a screenshot changes, edited after.
-          # The run for the push to its branch leaves it to the pull request's run.
+          # A push to main has no pull request to comment on.
           [ "${{ github.event_name }}" != push ] || exit 0
           pr=$(gh pr view "${{ github.head_ref || github.ref_name }}" --json number,state --jq 'select(.state == "OPEN") | .number' 2>/dev/null || true)
           [ -n "$pr" ] || exit 0
