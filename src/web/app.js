@@ -239,9 +239,8 @@ function view(name) {
 
 async function copySource() {
   try {
-    // What the reader shows: the rendered body, or the SKILL.md one tab over.
-    const shown = $('skill-source').hidden ? $('skill-rendered') : $('skill-source');
-    await navigator.clipboard.writeText(shown.textContent);
+    // The SKILL.md as the server read it, whichever tab is open.
+    await navigator.clipboard.writeText(current.open.source);
     $('copy').textContent = 'Copied';
   } catch {
     $('copy').textContent = 'Copy failed';
