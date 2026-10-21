@@ -83,6 +83,7 @@ Push nothing, release the claim, and stop. A person answers as review feedback, 
 A merge without conflicts can still break: `main` renamed a helper the branch calls, or changed a rule the branch's tests assume.
 Run everything CI runs, as in [issue-to-pr](../issue-to-pr/SKILL.md) step 6, and fix every failure the merge caused, in the merge itself.
 A failure that only a decision fixes goes to step 6. Never skip, weaken or delete a test to make it pass.
+A `web` screenshot that also fails on `main` or on the branch before the merge is not the merge's: only a person adds a baseline, with the `accept-screenshots` label. Leave it to the reviewer and name it in step 9's comment; never add the label, never commit a baseline, never change the UI to match one.
 
 ## 8. Commit and push
 
@@ -92,6 +93,6 @@ If the push is rejected because the branch moved, drop the local merge, `git fet
 
 ## 9. Reply, wait for CI and release
 
-After the push, comment once on the pull request: the files resolved and how, in a line each, and the merge commit, ending with the marker.
-Wait for [CI](../../../.github/workflows/ci.yml) on the merge commit. If it fails, read the log, fix the cause, push, and wait again until it is green.
+After the push, comment once on the pull request: the files resolved and how, in a line each, the merge commit, and any screenshots left to the reviewer (step 7), ending with the marker.
+Wait for [CI](../../../.github/workflows/ci.yml) on the merge commit. If it fails, read the log, fix the cause, push, and wait again until it is green but for the screenshots step 7 leaves to the reviewer.
 Then release the claim (step 2). Never merge the pull request: a human reviews and merges.

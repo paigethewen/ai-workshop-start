@@ -92,5 +92,5 @@ Post replies only after the push, so a marker never claims a change that is not 
 
 ## 8. Wait for CI and release
 
-Wait for [CI](../../../.github/workflows/ci.yml) on the new commit. If it fails, read the log, fix the cause, push, and wait again until it is green.
+Wait for [CI](../../../.github/workflows/ci.yml) on the new commit. If it fails, read the log, fix the cause, push, and wait again until it is green but for `web` screenshots that also fail on `main` or that the pull request means to change: as [issue-to-pr](../issue-to-pr/SKILL.md) step 7 says, those are the reviewer's, and you never add `accept-screenshots` or commit a baseline.
 Then release the claim (step 2).
