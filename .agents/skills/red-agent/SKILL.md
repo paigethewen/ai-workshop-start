@@ -32,7 +32,8 @@ Where to look first:
 - Safety: raw HTML, `javascript:` links, the `Host` check, the Content-Security-Policy
 - Errors: an unknown ref, owner or repository, a rate limit, a bad port; each must give the spec's message and exit code
 
-Build what a case needs under `/tmp`, never in the working tree; a GitHub case uses a public repository, pinned to a commit.
+Build a repository layout a case needs in `repro/fixture/<slug>/`, a scratch directory that git ignores: the web tests run in a container that sees only the working tree, and its `fixture` keeps `./skill-atlas scan .` from counting it. Never under `/tmp`, which that container does not have.
+A GitHub case uses a public repository, pinned to a commit; a web case can scan only `./fixture`, `./repro/fixture/<slug>`, or a repository already in [github.json](../../../e2e/web/github.json), since it has no network.
 
 A finding is a bug only when all of these hold:
 
@@ -44,11 +45,14 @@ A finding is a bug only when all of these hold:
 When the spec is silent and the behavior is only surprising, it is not a bug: drop it, or file it as a question without this skill's label.
 If an hour of hunting finds nothing that passes, stop and say so: no issue.
 
+Steps 3 to 6 take **one bug at a time**, from its test to its pull request, before the next one starts: a test or web case left over from another bug would follow you onto this bug's branch, fail its `npm test`, and end up fixed or deleted in the wrong pull request.
+
 ## 3. Reproduce it as a test
 
+Start each bug from a clean `main`: `git switch main && git pull`, and `git status --porcelain` prints nothing (`repro/` aside, which git ignores).
 Write the smallest test that fails on `main` because of the bug, and passes once it is fixed; it asserts the right behavior, not the wrong one:
 
-- an integration test in [tests/](../../../tests/), named after the behavior, matching the existing tests' style and helpers; a repository layout it needs goes in `/tmp` for now, in [fixture/](../../../fixture/) with the fix
+- an integration test in [tests/](../../../tests/), named after the behavior, matching the existing tests' style and helpers; a repository layout it needs goes in `repro/fixture/<slug>/` for now (step 2), in [fixture/](../../../fixture/) with the fix
 - and, when the web view shows the bug, a case in `e2e/web/repro.spec.ts`, built like the cases in [demo.spec.ts](../../../e2e/web/demo.spec.ts): start from a scan, act through the page's own controls, `pause` before and after the moment the bug shows so a viewer sees it, and end on it; no `moment`, so no screenshot baseline is involved
 
 Run the integration test (`node --test tests/<file>.test.ts`) and see it fail with the bug's symptom; a test that fails for another reason proves nothing.
@@ -92,17 +96,19 @@ Then `gh issue create --label bug --label 'found by red-agent' --title <title> -
   - a last line, the marker: `<!-- red-agent: <one-line fingerprint: the rule and the input> -->`
 
 Do not add the `delegated to ai` label: this run fixes the bug itself, and the label would start a second run of [issue-to-pr](../issue-to-pr/SKILL.md) on it.
-Several bugs found → file each one, then fix each one in its own pull request, one after the other.
+Several bugs found → each gets its own issue and its own pull request: finish this one through step 6, then start the next at step 3.
 
 ## 6. Fix it
 
 Follow [issue-to-pr](../issue-to-pr/SKILL.md) for the issue you filed, from its step 2 to its end: the issue is reviewed already.
-On a branch named `air/fix-<number>-<slug>`, so the [address-comment](../address-comment/SKILL.md) automation handles its review.
-The failing test of step 3 is where its step 4 starts: move it into the tests, its layout into [fixture/](../../../fixture/).
+On a branch named `air/fix-<number>-<slug>`, so the [address-comment](../address-comment/SKILL.md) automation handles its review, made from the `main` of step 3: `git switch -c air/fix-<number>-<slug>`; the only changes it carries are this bug's test and web case.
+The failing test of step 3 is where its step 4 starts: move it into the tests, its layout from `repro/fixture/<slug>/` into [fixture/](../../../fixture/), mapped in [fixture/README.md](../../../fixture/README.md).
 The web case of step 3 becomes a demo case: move it from `e2e/web/repro.spec.ts` into [demo.spec.ts](../../../e2e/web/demo.spec.ts) with its `moment`s, named after the fixed behavior, as the [demo-video](../demo-video/SKILL.md) skill says; delete `repro.spec.ts`. CI records it fixed: the issue shows the bug, the pull request shows it gone.
 The pull request body starts with `Closes #<number>`, and its `## Demo` links the issue's video as the before and the CI run as the after.
 
 If the fix needs a decision only a person can make, or the spec must change in a way the issue does not settle, comment the question with the options and your recommendation on the issue, and stop there: the issue stands without a pull request.
+
+Then, before the next bug: `git switch main`, discarding the test and web case of a bug left without a pull request (its issue holds them), and delete `repro/fixture/<slug>/`.
 
 ## 7. Report
 
