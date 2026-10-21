@@ -100,3 +100,22 @@ test('scan-organization: scan the modelcontextprotocol organization, open one of
   await moment(page, 'scan-organization-3-back');
   await pause(page, 3000);
 });
+
+test.describe('a narrow screen', () => {
+  // A phone-sized window, narrower than the page's 820px breakpoint. The video keeps its size: the page is scaled into it.
+  test.use({ viewport: { width: 600, height: 900 } });
+
+  test('narrow-screen: scan ./fixture in a 600px-wide window: one column, the open skill below the list at full width', async ({ page }) => {
+    await scan(page, './fixture');
+    await shown(page, '#skills a');
+    await expect(page.locator('#skill-name')).toHaveText('code-review');
+    const list = (await page.locator('.sidebar').boundingBox())!;
+    const skill = (await page.locator('#skill').boundingBox())!;
+    expect(skill.y, 'the skill is below the list').toBeGreaterThanOrEqual(list.y + list.height - 1);
+    expect(skill.width, 'the skill takes the width of the window').toBeGreaterThanOrEqual(580);
+    await moment(page, 'narrow-screen-1-list');
+    await pause(page, 3000);
+    await page.mouse.wheel(0, 500);
+    await pause(page, 3000);
+  });
+});
