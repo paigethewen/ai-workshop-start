@@ -1,7 +1,7 @@
 :root {
   color-scheme: light dark;
   --bg: #f7f7fb; --surface: #ffffff; --surface-2: #f1f0f7; --text: #1c1b29; --muted: #6b6a7d;
-  --line: #e4e3ee; --accent: #6b57ff; --accent-soft: #6b57ff17; --accent-text: #5341e0;
+  --line: #e4e3ee; --accent: #6b57fe; --accent-soft: #6b57ff17; --accent-text: #5341e0;
   --warn: #9a6400; --warn-soft: #ffb02012; --danger: #d23b4b; --danger-soft: #d23b4b12;
   --shadow: 0 1px 2px #1c1b290d, 0 4px 16px #1c1b2909;
   --radius: 12px; --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
