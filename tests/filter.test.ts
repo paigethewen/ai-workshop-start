@@ -2,7 +2,7 @@
 // for ./fixture. The page runs src/web/filter.js as it is; here it runs in Node.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { excerpt, marked, matches, words } from '../src/web/filter.js';
+import { excerpt, grouped, marked, matches, words } from '../src/web/filter.js';
 import { scanForWeb } from '../src/web/server.ts';
 import { FIXTURE, open } from './helpers.ts';
 
@@ -97,4 +97,34 @@ test('a long line is cut around its first match', () => {
   const cut = excerpt(`---\nname: x\n---\n${line}\n`, ['needle'], 'x');
   assert.match(cut, /^….*needle.*…$/);
   assert.ok(cut.length <= 82, cut);
+});
+
+test('grouping puts skills under the word they share, the most shared first, and the rest under no word', async () => {
+  const groups = grouped((await fixture).skills).map((group) => ({ word: group.word, paths: group.skills.map((skill) => skill.path) }));
+  assert.deepEqual(groups, [
+    { word: 'code', paths: ['.cursor/skills/review/SKILL.md', '.codex/skills/code-style/SKILL.md'] },
+    { word: 'commit', paths: ['.agents/skills/commits/SKILL.md', 'modules/editor/.claude/skills/commits/SKILL.md'] },
+    {
+      word: undefined,
+      paths: ['.agents/skills/release-checklist/SKILL.md', '.claude/skills/test-runner/SKILL.md', 'agent/skills/writing-lint-checks/SKILL.md'],
+    },
+  ]);
+});
+
+test('grouping weighs a word in the name over a more common one in descriptions, and skips common words and plurals', () => {
+  const skill = (name: string, description: string) => ({ name, description });
+  const lint = skill('lint', 'Use the linter on the sources.');
+  const lintRules = skill('lint-rules', 'Write rules for the sources.');
+  const docs = skill('docs', 'Write the sources docs.');
+  assert.deepEqual(grouped([lint, lintRules, docs]), [
+    { word: 'lint', skills: [lint, lintRules] },
+    { word: undefined, skills: [docs] },
+  ]);
+  const tests = skill('tests', 'Use this skill.');
+  const test = skill('test', 'Use this skill.');
+  assert.deepEqual(grouped([tests, test]), [{ word: 'test', skills: [tests, test] }]);
+});
+
+test('grouping no skills → no groups', () => {
+  assert.deepEqual(grouped([]), []);
 });

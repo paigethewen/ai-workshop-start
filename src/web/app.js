@@ -1,7 +1,7 @@
 // The web view's page: scans through /api/scan and shows one skill at a time, or an organization's
 // repositories with skills. The address keeps the repository or the owner in ?repo= and the open
 // skill in #<path>, so a reload or a shared link shows the same.
-import { excerpt, marked, matches, words as wordsIn } from './filter.js';
+import { excerpt, grouped, marked, matches, words as wordsIn } from './filter.js';
 
 const $ = (id) => document.getElementById(id);
 let current;
@@ -27,6 +27,7 @@ for (const chip of document.querySelectorAll('[data-repo]')) {
   });
 }
 $('filter').addEventListener('input', filter);
+$('group').addEventListener('change', () => current?.skills && list());
 $('copy').addEventListener('click', copySource);
 window.addEventListener('popstate', fromAddress);
 window.addEventListener('hashchange', () => current?.skills && show(location.hash.slice(1)));
@@ -117,18 +118,7 @@ function render() {
   $('summary').textContent = `${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`;
   $('filter').value = '';
   words = [];
-  $('skills').replaceChildren(
-    ...skills.map((skill) => {
-      const item = document.createElement('li');
-      const link = document.createElement('a');
-      link.href = `#${encodeURIComponent(skill.path)}`;
-      link.dataset.path = skill.path;
-      fillItem(link, skill);
-      item.append(link);
-      return item;
-    }),
-  );
-  $('no-match').hidden = true;
+  list();
   folded($('warnings'), warnings);
   $('no-skills').hidden = skills.length > 0;
   screen('results');
@@ -216,17 +206,38 @@ function badges(skill) {
 
 function filter() {
   words = wordsIn($('filter').value);
-  let shown = 0;
-  const links = $('skills').querySelectorAll('a');
-  current.skills.forEach((skill, index) => {
-    const match = matches(skill, words);
-    links[index].parentElement.hidden = !match;
-    if (!match) return;
-    fillItem(links[index], skill);
-    shown++;
-  });
-  $('no-match').hidden = shown > 0 || current.skills.length === 0;
+  list();
   if (current.open) fillSkill(current.open);
+}
+
+/** The skills that match the filter; with grouping on, under the word each group shares. */
+function list() {
+  const shown = current.skills.filter((skill) => matches(skill, words));
+  const items = (skills) =>
+    skills.map((skill) => {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = `#${encodeURIComponent(skill.path)}`;
+      link.dataset.path = skill.path;
+      link.toggleAttribute('aria-current', skill === current.open);
+      fillItem(link, skill);
+      item.append(link);
+      return item;
+    });
+  $('skills').replaceChildren(
+    ...(!$('group').checked
+      ? items(shown)
+      : grouped(shown).map((group) => {
+          const item = element('li', 'group', '');
+          const head = element('h3', 'group-head', '');
+          head.append(element('span', '', group.word ?? 'Other'), element('span', 'count', String(group.skills.length)));
+          const skills = element('ul', 'skill-list', '');
+          skills.append(...items(group.skills));
+          item.append(head, skills);
+          return item;
+        })),
+  );
+  $('no-match').hidden = shown.length > 0 || current.skills.length === 0;
 }
 
 function view(name) {

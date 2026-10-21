@@ -77,6 +77,64 @@ export function excerpt(source, words, shown) {
   return '';
 }
 
+/** Words too common in skills' names and descriptions to group them by. */
+const COMMON = new Set([
+  'the', 'and', 'for', 'with', 'from', 'into', 'this', 'that', 'these', 'its', 'their', 'them', 'then', 'also',
+  'any', 'all', 'only', 'every', 'way', 'does', 'use', 'used', 'using', 'when', 'before', 'after', 'under',
+  'inside', 'new', 'skill', 'skills',
+]);
+
+/**
+ * The words a skill can be grouped by: its name's and description's words of three letters or more, in lower
+ * case, without a plural `s` and without common words; the name's are listed apart, as they weigh more.
+ * @param {{ name: string, description: string }} skill
+ */
+function keywords(skill) {
+  const of = (text) =>
+    new Set(
+      (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+        .map((word) => (word.length > 3 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word))
+        .filter((word) => word.length >= 3 && !COMMON.has(word)),
+    );
+  const name = of(skill.name);
+  return { name, all: new Set([...name, ...of(skill.description)]) };
+}
+
+/**
+ * The skills in groups by a shared word, the largest first: the word that most skills share, a skill whose
+ * name has it counting twice, takes every skill that has it, and so on while a word is shared by two skills
+ * or more; the skills left share none, in a last group without a word. Each group keeps the skills' order.
+ * @template {{ name: string, description: string }} T
+ * @param {T[]} skills
+ * @returns {{ word: string | undefined, skills: T[] }[]}
+ */
+export function grouped(skills) {
+  const words = new Map(skills.map((skill) => [skill, keywords(skill)]));
+  let left = skills;
+  const groups = [];
+  for (;;) {
+    /** @type {Map<string, { score: number, count: number }>} */
+    const shared = new Map();
+    for (const skill of left) {
+      const { name, all } = /** @type {ReturnType<typeof keywords>} */ (words.get(skill));
+      for (const word of all) {
+        const entry = shared.get(word) ?? { score: 0, count: 0 };
+        entry.score += name.has(word) ? 2 : 1;
+        entry.count++;
+        shared.set(word, entry);
+      }
+    }
+    const best = [...shared]
+      .filter(([, { count }]) => count >= 2)
+      .sort(([a, x], [b, y]) => y.score - x.score || y.count - x.count || a.localeCompare(b))[0]?.[0];
+    if (!best) break;
+    groups.push({ word: best, skills: left.filter((skill) => words.get(skill)?.all.has(best)) });
+    left = left.filter((skill) => !words.get(skill)?.all.has(best));
+  }
+  if (left.length) groups.push({ word: undefined, skills: left });
+  return groups;
+}
+
 /**
  * The text in lower case, and where each of its characters is in the text: a few letters, such as 'İ',
  * are longer in lower case.

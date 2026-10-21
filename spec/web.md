@@ -13,6 +13,7 @@ Enter `https://github.com/<owner>`: the page lists the organization's repositori
 - Each skill: its name, `×N` for N copies in all, the first sentence, and a badge per agent that reads it (`.claude` → Claude, `.github` → Copilot, …) and for a nested package, its `<base>`
 - A filter: the skills whose name, description, path or `SKILL.md` has every word typed, in any case; no words → every skill
 - Each word typed is marked where the list shows it; a skill that matches outside its name and first sentence shows the first line of its `SKILL.md` that does
+- Group by shared words, off by default: the skills the filter keeps, under the word most of them share, in their name or description, a name's word counting twice; then the next word over the skills left, while two or more share one; the rest under *Other*. Common words (`the`, `use`, `skill`, …), words under three letters and a plural `s` do not count
 - No skills → a note on where skills live
 - An unreachable repository → its `scan` message on the page
 ## An organization
