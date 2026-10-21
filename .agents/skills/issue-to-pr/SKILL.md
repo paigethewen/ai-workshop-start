@@ -73,3 +73,4 @@ Wait for [CI](../../../.github/workflows/ci.yml) on the pull request. If it fail
 The one failure that is not yours to fix: the `web` job's screenshots, when the change means to change what the web view shows. CI comments their before, after and diff on the pull request; check them as the [demo-video](../demo-video/SKILL.md) skill says, list them in the body with why each changes, and leave them to the reviewer, who accepts them with the `accept-screenshots` label. Never add it, and never commit a baseline.
 The work is done when the pull request is open and CI is green but for those screenshots; do not merge it: a human reviews and merges.
 Opening it starts the code-review automation, whose review starts the [address-comment](../address-comment/SKILL.md) automation: do not watch for review yourself.
+A conflict with `main` is the [resolve-conflicts](../resolve-conflicts/SKILL.md) automation's: do not watch for it either.
