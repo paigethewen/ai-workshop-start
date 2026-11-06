@@ -34,12 +34,18 @@ export async function openGitHub(input: string, options: GitHubOptions): Promise
   const name = parseGitHubUrl(input);
   if (!name) throw new AtlasError(`Not a GitHub repository URL: ${input}`);
   const github = client(options);
-  const info = await github.json<{ full_name: string; default_branch: string }>(
+  const info = await github.json<{ full_name: string; default_branch: string; fork: boolean }>(
     `${API}/repos/${name.owner}/${name.repo}`,
     `Repository not found: https://github.com/${name.owner}/${name.repo}`,
   );
   // Code search sees only the default branch: a pinned commit is listed from its tree.
-  const hint = name.ref ? 'a pinned commit cannot be searched' : options.token ? undefined : 'GITHUB_TOKEN searches everywhere';
+  const hint = name.ref
+    ? 'a pinned commit cannot be searched'
+    : info.fork
+      ? 'GitHub code search does not reliably index forks'
+      : options.token
+        ? undefined
+        : 'GITHUB_TOKEN searches everywhere';
   return openCommit(github, info.full_name, name.ref ?? info.default_branch, hint);
 }
 
