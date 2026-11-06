@@ -38,6 +38,7 @@ The same skill is often kept for several agents: `.claude/skills/x` for Claude a
 - A front matter name that is not its directory name → a *warning*; the directory decides what is a copy
 - **Symlinks are not followed**: a symlinked skill or agent folder is neither counted nor listed as a copy
 - A truncated GitHub tree without `GITHUB_TOKEN` looks only in root-level agent folders; the warning says nested ones were skipped
+- A fork is always listed from its Git tree, even with `GITHUB_TOKEN`, because GitHub code search may omit fork contents
 ## Test fixture
 `fixture/` holds one case per rule above; [fixture/README.md](../fixture/README.md) maps each path to its case.
 The test-data rule means `./skill-atlas scan .` on this repository finds *none* of them, only the repository's own `address-comment`, `code-review`, `demo-video`, `issue-to-pr`, `red-agent`, `resolve-conflicts` and `status-update` skills: the tests scan `./fixture` directly.

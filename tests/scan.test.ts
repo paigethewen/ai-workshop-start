@@ -245,6 +245,29 @@ test('a /tree/<ref> URL scans that commit from its tree, even with GITHUB_TOKEN'
   );
 });
 
+test('a fork scans its tree with GITHUB_TOKEN because code search can omit forks', async () => {
+  const commit = '0123456789abcdef0123456789abcdef01234567';
+  const api = 'https://api.github.com/repos/JetBrains/forked';
+  const forked = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/forked', default_branch: 'main', fork: true } },
+    [`${api}/commits/main`]: { status: 200, body: { sha: commit } },
+    [`${api}/git/trees/${commit}?recursive=1`]: {
+      status: 200,
+      body: { truncated: false, tree: [{ path: '.claude/skills/commits/SKILL.md', mode: '100644', type: 'blob', sha: 'file' }] },
+    },
+    [`https://raw.githubusercontent.com/JetBrains/forked/${commit}/.claude/skills/commits/SKILL.md`]: {
+      status: 200,
+      body: '---\nname: commits\ndescription: Write commit messages.\n---\n',
+    },
+  });
+  const result = await scan(await openGitHub('https://github.com/JetBrains/forked', { fetch: forked, token: 'test' }));
+  assert.deepEqual(
+    result.skills.map((skill) => `${skill.commit} ${skill.path}`),
+    [`${commit} .claude/skills/commits/SKILL.md`],
+  );
+  assert.deepEqual(result.warnings, []);
+});
+
 test('an unknown ref → a clear message, exit code 1', async () => {
   const api = 'https://api.github.com/repos/JetBrains/pinned';
   const unknown = replay({
